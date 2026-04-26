@@ -1,0 +1,27 @@
+{
+    "jsonrpc": "2.0",
+    "id": -1,
+    "result": {
+      "node_info": {
+        "protocol_version": { "p2p": "8", "block": "11", "app": "0" },
+        "id": "82947ebad484b4c3d7429c34561689e23d35f779",
+        "listen_addr": "tcp://0.0.0.0:14656",
+        "network": "atomone-1",
+        "version": "0.37.16",
+        "channels": "40202122233038606100",
+        "moniker": "Cogwheel",
+        "other": { "tx_index": "on", "rpc_address": "tcp://127.0.0.1:14657" }
+      },
+      "sync_info": {
+        "latest_block_hash": "9B9668E749E3E6727D27053D1FF3CCA8DE6F188E978D90AD20748F5F9B38E786",
+        "latest_app_hash": "C831F0026EA6BCAF754C62F04454286EA3D29C2E4E4D97FA339944105056EB8F",
+        "latest_block_height": "8251317",
+        "latest_block_time": "2026-04-25T19:57:18.465771032Z",
+        "earliest_block_hash": "321EED7A75890AB6AB698AF68FEAEE64EB8CBA06BA4BC49165CD8C958B3745D0",
+        "earliest_app_hash": "C35246109E44729ABEB28DFFE85E3949F6BDDB268B0FD04C3604844C0E563011",
+        "earliest_block_height": "7604001",
+        "earliest_block_time": "2026-03-13T08:53:20.720479201Z",
+        "catching_up": false
+      }
+  }
+}

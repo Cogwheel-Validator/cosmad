@@ -1,0 +1,13 @@
+{
+    "jsonrpc": "2.0",
+    "id": -1,
+    "signed_header": {
+      "header": {
+        "version": {
+          "block": "11"
+        },
+        "chain_id": "atomone-1",
+        "height": "8259656"
+      }
+    }
+}
