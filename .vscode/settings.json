@@ -1,4 +1,5 @@
 {
+    "typescript.tsdk": "node_modules/typescript/lib",
     "biome.configurationPath": "./biome.json",
     "biome.lsp.bin": "./node_modules/@biomejs/biome/bin/biome",
     "editor.defaultFormatter": "biomejs.biome",
@@ -6,5 +7,20 @@
     "editor.codeActionsOnSave": {
         "source.fixAll.biome": "always",
         "source.organizeImports.biome": "always"
+    },
+    "[typescript]": {
+            "editor.defaultFormatter": "biomejs.biome"
+    },
+    "[vue]": {
+            "editor.defaultFormatter": "biomejs.biome"
+    },
+    "[javascript]": {
+            "editor.defaultFormatter": "biomejs.biome"
+    },
+    "[json]": {
+            "editor.defaultFormatter": "biomejs.biome"
+    },
+    "[jsonc]": {
+            "editor.defaultFormatter": "biomejs.biome"
     }
 }
