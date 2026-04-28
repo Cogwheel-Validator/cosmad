@@ -14,6 +14,11 @@ type RpcError = {
   code: number;
 };
 
+/**
+ * Query the status of a Cosmos-based chain RPC endpoint.
+ * @param rpcUrl - The URL of the RPC endpoint to query.
+ * @returns A response containing the parsed status data if successful, or an error if not.
+ */
 export async function getStatus(rpcUrl: string): Promise<Response<RpcStatusResponse>> {
   const queryUrl = `${rpcUrl}/status`;
   try {
@@ -45,6 +50,13 @@ export async function getStatus(rpcUrl: string): Promise<Response<RpcStatusRespo
   }
 }
 
+/**
+ * Query the commit of a Cosmos-based chain RPC endpoint.
+ * @param rpcUrl - The URL of the RPC endpoint to query.
+ * @param height - The height to query the commit at.
+ *   If not provided, the latest commit will be returned.
+ * @returns A response containing the parsed commit data if successful, or an error if not.
+ */
 export async function getCommit(
   rpcUrl: string,
   height?: number,

@@ -35,13 +35,34 @@ const CommitSigners = type({
   signature: "string.base64 == 88| null",
 });
 
+const Header = type({
+  version: {
+    block: "string.integer",
+  },
+  chainId: "string",
+  height: "string.integer",
+  time: "string.date.iso",
+  lastBlockId: {
+    hash: "string",
+    parts: {
+      total: "number",
+      hash: "string",
+    },
+  },
+  lastCommitHash: "string",
+  dataHash: "string",
+  validatorsHash: "string",
+  nextValidatorsHash: "string",
+  consensusHash: "string",
+  appHash: "string",
+  lastResultsHash: "string",
+  evidenceHash: "string",
+  proposerAddress: "string",
+});
+
 const BlockCommit = type({
   signedHeader: {
-    header: {
-      chainId: "string",
-      height: "string.integer",
-      proposerAddress: "string",
-    },
+    header: Header,
     commit: {
       height: "string.integer",
       round: "number",

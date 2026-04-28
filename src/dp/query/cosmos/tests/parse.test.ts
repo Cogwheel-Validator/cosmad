@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ArkErrors } from "arktype";
 import camelcaseKeys from "camelcase-keys";
 import { describe, expect, test } from "vitest";
-import { BlockCommitSchema, RpcStatusSchema } from "../types";
+import { type BlockCommitResponse, BlockCommitSchema, RpcStatusSchema } from "../types";
 
 const testDataDir = join(import.meta.dirname, "test_data");
 const status = JSON.parse(readFileSync(join(testDataDir, "test_status.json"), "utf8"));
@@ -31,7 +31,7 @@ describe("Rpc status", () => {
 
 describe("Block commit", () => {
   test("Parse commit", () => {
-    const normalized = camelcaseKeys(commit, { deep: true });
+    const normalized: BlockCommitResponse = camelcaseKeys(commit, { deep: true });
     const commitParsed = BlockCommitSchema.assert(normalized);
 
     expect(normalized.result).toMatchObject(commitParsed.result);
