@@ -1,16 +1,16 @@
-import type { Response } from "../types";
-import { getCommit, getStatus } from "./query";
-import type { BlockCommitResponse, RpcStatusResponse } from "./types";
+import { getCommit, getStatus } from "./universal_rpc_query";
+import type { BlockCommitResponse, Response, RpcStatusResponse } from "./universal_types";
 
 const MAX_HEIGHT_DIFFERENCE = 20;
 
 // Minimalistic RPC client for Cosmos-based chains.
-export class CosmosRpcClient {
+export class RpcClient {
   readonly chainId: string;
   readonly rpcUrls: string[];
+  readonly chainType: "bft" | "tm2";
 
   // Initialize the client with a list of RPC URLs and a chain ID.
-  constructor(rpcUrls: string[], chainId: string) {
+  constructor(rpcUrls: string[], chainId: string, chainType: "bft" | "tm2") {
     this.chainId = chainId;
     this.rpcUrls = Array<string>(rpcUrls.length);
     for (let [i, url] of rpcUrls.entries()) {
@@ -20,6 +20,7 @@ export class CosmosRpcClient {
       }
       this.rpcUrls[i] = url;
     }
+    this.chainType = chainType;
   }
 
   // Get RPC client chain ID

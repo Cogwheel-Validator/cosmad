@@ -1,0 +1,52 @@
+{
+  "jsonrpc": "2.0",
+  "id": "",
+  "result": {
+    "node_info": {
+      "version_set": [
+        {
+          "Name": "abci",
+          "Version": "v1.0.0-rc.0",
+          "Optional": false
+        },
+        {
+          "Name": "app",
+          "Version": "",
+          "Optional": false
+        },
+        {
+          "Name": "bft",
+          "Version": "v1.0.0-rc.0",
+          "Optional": false
+        },
+        {
+          "Name": "blockchain",
+          "Version": "v1.0.0-rc.0",
+          "Optional": false
+        },
+        {
+          "Name": "p2p",
+          "Version": "v1.0.0-rc.0",
+          "Optional": false
+        }
+      ],
+      "net_address": "g1ahwwlt8km8s47h4uvayyr9gxxqlkvnlyaaltr4@0.0.0.0:26656",
+      "network": "test11",
+      "software": "",
+      "version": "v1.0.0-rc.0",
+      "channels": "QCAhIiMwUA==",
+      "moniker": "cogwheel-v1",
+      "other": {
+        "tx_index": "off",
+        "rpc_address": "tcp://0.0.0.0:26657"
+      }
+    },
+    "sync_info": {
+      "latest_block_hash": "hLWEprkQ5J5TVRVS3AGKwecpmeO41xqqtXckGZu87rc=",
+      "latest_app_hash": "KeegiwjS3DYIi0cMlqmza3v4YOKzV52stt2BUrD/YUw=",
+      "latest_block_height": "1486275",
+      "latest_block_time": "2026-04-25T10:20:26.369640194Z",
+      "catching_up": false
+    }
+  }
+}

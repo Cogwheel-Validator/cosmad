@@ -1,13 +1,13 @@
 import { ArkErrors } from "arktype";
 import axios from "axios";
 import camelcaseKeys from "camelcase-keys";
-import type { Response } from "../types";
 import {
   type BlockCommitResponse,
   BlockCommitSchema,
+  type Response,
   type RpcStatusResponse,
   RpcStatusSchema,
-} from "./types";
+} from "./universal_types";
 
 type RpcError = {
   message: string;
@@ -38,10 +38,10 @@ export async function getStatus(rpcUrl: string): Promise<Response<RpcStatusRespo
       return {
         ok: false,
         error: `
-        Code: ${error.code ?? "unknown"}, 
-        reason: ${error.message}, 
-        http status: ${error.response?.status}, 
-        url: ${error.config?.url}, 
+        Code: ${error.code ?? "unknown"},
+        reason: ${error.message},
+        http status: ${error.response?.status},
+        url: ${error.config?.url},
         ${error.config?.url}`,
       };
     } else {
@@ -79,9 +79,9 @@ export async function getCommit(
       return {
         ok: false,
         error: `
-        Code: ${error.code ?? "unknown"}, 
-        reason: ${error.message}, 
-        http status: ${error.response?.status}, 
+        Code: ${error.code ?? "unknown"},
+        reason: ${error.message},
+        http status: ${error.response?.status},
         url: ${error.config?.url}`,
       };
     } else {

@@ -3,8 +3,7 @@ import { join } from "node:path";
 import type { AxiosResponse } from "axios";
 import axios from "axios";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { getCommit, getStatus } from "../query";
-import { BlockCommitSchema } from "../types";
+import { getCommit, getStatus } from "../universal_rpc_query";
 
 vi.mock("axios");
 
@@ -59,7 +58,6 @@ describe("cosmos query", () => {
 
     expect(res.ok).toBe(true);
     expect(res.data).toBeDefined();
-    expect(() => BlockCommitSchema.assert(res.data)).not.toThrow();
     expect(vi.mocked(axios.get)).toHaveBeenCalledWith("https://rpc.example/commit?height=8259656", {
       timeout: 5000,
     });
