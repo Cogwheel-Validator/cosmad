@@ -22,5 +22,10 @@
     },
     "[jsonc]": {
             "editor.defaultFormatter": "biomejs.biome"
-    }
+    },
+    "notebook.defaultFormatter": "biomejs.biome",
+    "editor.codeActions.triggerOnFocusChange": true,
+    "typescript.inlayHints.propertyDeclarationTypes.enabled": true,
+    "js/ts.implicitProjectConfig.checkJs": true,
+    "js/ts.implicitProjectConfig.module": "ES2022",
 }
