@@ -23,6 +23,8 @@
   "dependencies": {
     "arktype": "^2.2.0",
     "axios": "^1.15.2",
-    "camelcase-keys": "^10.0.2"
+    "camelcase-keys": "^10.0.2",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3"
   }
 }
