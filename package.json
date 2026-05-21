@@ -21,6 +21,7 @@
     "vitest": "^4.1.5"
   },
   "dependencies": {
+    "@duckdb/node-api": "1.5.2-r.1",
     "arktype": "^2.2.0",
     "axios": "^1.15.2",
     "camelcase-keys": "^10.0.2",

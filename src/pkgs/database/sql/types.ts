@@ -1,11 +1,15 @@
-enum AllowedTypes {
-  TEXT = "TEXT",
-  INTEGER = "INTEGER",
-  BIGINT = "BIGINT",
-  DOUBLE = "DOUBLE",
+export enum AllowedTypes {
   BOOLEAN = "BOOLEAN",
-  TIMESTAMP = "TIMESTAMP",
+  BIGINT = "BIGINT",
+  BYTEA = "BYTEA",
+  DOUBLE = "DOUBLE",
+  INTEGER = "INTEGER",
   JSON = "JSON",
+  TEXT = "TEXT",
+  TINIINT = "TINIINT",
+  TIMESTAMP = "TIMESTAMP",
+  UBIGINT = "UBIGINT",
+  VARCHAR = "VARCHAR",
 }
 
 export interface ColumnOptions {
@@ -15,7 +19,9 @@ export interface ColumnOptions {
   index?: boolean;
   nullable?: boolean;
   default?: string;
-  propertyKey: string;
+  propertyKey?: string;
+  unique?: boolean;
+  varcharLen?: number;
 }
 
 export type Constructor<T = object> = new (...args: unknown[]) => T;
