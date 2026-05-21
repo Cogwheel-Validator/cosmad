@@ -118,9 +118,9 @@ export class RWDB {
     );
     const duckdbData = blocks.map((block) => block.toDuckDbData());
     try {
-      const appender = await this.conn.createAppender("block");
+      const appender = await this.conn.createAppender("blocks");
       const chunk = DuckDBDataChunk.create([UBIGINT, BLOB, TIMESTAMP, BOOLEAN, BLOB]);
-      chunk.appendToRows(
+      chunk.setRows(
         duckdbData.map((data) => [
           data.height,
           data.hash,
@@ -129,6 +129,7 @@ export class RWDB {
           data.signature ?? null,
         ]),
       );
+      appender.appendDataChunk(chunk);
       appender.closeSync();
       this.log.info("Blocks appended successfully");
       return { success: true };
