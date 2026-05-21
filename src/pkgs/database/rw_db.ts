@@ -10,6 +10,8 @@ import {
 } from "@duckdb/node-api";
 import type { Logger } from "pino";
 import logger from "../logger/logger";
+import { generateCreateTableStatements } from "./sql/generate";
+import type { Constructor } from "./sql/types";
 import { Alert, Block } from "./tables";
 
 export interface RwdbWriteResult {
@@ -55,8 +57,7 @@ export class RWDB {
 
     const defaultOptions: Record<string, string> = {
       threads: "2",
-      memory: "500MB",
-      enable_logging: "true",
+      memory_limit: "500MB",
       temp_directory: tempDir,
       access_mode: "READ_WRITE",
       max_temp_directory_size: "1GB",
@@ -78,7 +79,22 @@ export class RWDB {
     const rwdb = new RWDB(chainId, conn);
     rwdb.log.info("Database connection established successfully");
     rwdb.log.debug("Database options: %o", defaultOptions);
+    await rwdb.initSchema();
     return rwdb;
+  }
+
+  /**
+   * Run CREATE TABLE IF NOT EXISTS (and any index DDL) for every known table.
+   * Safe to call on every startup — all statements are idempotent.
+   */
+  private async initSchema(): Promise<void> {
+    const tables: Constructor[] = [Block, Alert] as unknown as Constructor[];
+    for (const table of tables) {
+      for (const stmt of generateCreateTableStatements(table)) {
+        await this.conn.run(stmt);
+      }
+    }
+    this.log.info("Schema initialised");
   }
 
   // Close the database connection.
@@ -156,7 +172,7 @@ export class RWDB {
   public async latestBlock(): Promise<RwdbQueryResult<Block | null>> {
     const sql = `SELECT * FROM blocks ORDER BY height DESC LIMIT 1`;
     try {
-      const result = await this.conn.runAndRead(sql);
+      const result = await this.conn.runAndReadAll(sql);
       const rows = result.getRowObjects();
       if (rows.length === 0) {
         return { success: true, result: null };
@@ -175,7 +191,7 @@ export class RWDB {
   public async latestBlockHeight(): Promise<RwdbQueryResult<bigint | null>> {
     const sql = `SELECT height FROM blocks ORDER BY height DESC LIMIT 1`;
     try {
-      const result = await this.conn.runAndRead(sql);
+      const result = await this.conn.runAndReadAll(sql);
       const rows = result.getRows();
       if (rows.length === 0) {
         return { success: true, result: null };
@@ -228,7 +244,7 @@ export class RWDB {
   public async getAlert(alertKey: string): Promise<RwdbQueryResult<Alert | null>> {
     const sql = `SELECT * FROM alerts WHERE alert_id = '${alertKey}' LIMIT 1`;
     try {
-      const result = await this.conn.runAndRead(sql);
+      const result = await this.conn.runAndReadAll(sql);
       const rows = result.getRowObjects();
       if (rows.length === 0) {
         return { success: true, result: null };
@@ -247,7 +263,7 @@ export class RWDB {
   public async getUnclosedAlerts(): Promise<RwdbQueryResult<Alert[]>> {
     const sql = `SELECT * FROM alerts WHERE closed_at IS NULL ORDER BY opened_at ASC`;
     try {
-      const result = await this.conn.runAndRead(sql);
+      const result = await this.conn.runAndReadAll(sql);
       const rows = result.getRowObjects();
       return { success: true, result: rows.map((row) => Alert.fromDuckDbData(row)) };
     } catch (error) {
