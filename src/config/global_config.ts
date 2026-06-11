@@ -1,25 +1,13 @@
 import { type } from "arktype";
 import { ChainConfig } from "./chain_types";
+import { DiscordConfig, PagerdutyConfig, TelegramConfig } from "./notification_types";
 
-export const PagerdutyConfig = type({
-  enabled: "boolean",
-  serviceKey: "string",
-});
-
-export const DiscordConfig = type({
-  enabled: "boolean",
-  webhookUrl: "string",
-});
-
-export const TelegramConfig = type({
-  enabled: "boolean",
-  apiToken: "string",
-})
+export { DiscordConfig, PagerdutyConfig, TelegramConfig };
 
 const HealthCheckConfig = type({
   enabled: "boolean",
   endpoint: "string",
-  ping: "number", // seconds
+  ping: "number.integer", // seconds
 });
 
 export const GlobalConfig = type({
@@ -27,9 +15,11 @@ export const GlobalConfig = type({
   // For the dashboard to work the API needs to be served.
   serveDashboard: "boolean",
 
-  pagerduty: PagerdutyConfig.or(type.undefined),
-  discord: DiscordConfig.or(type.undefined),
-  telegram: TelegramConfig.or(type.undefined),
-  healthCheck: HealthCheckConfig.or(type.undefined),
-  chainConfigs: ChainConfig.array().or(type.undefined),
+  "pagerduty?": PagerdutyConfig,
+  "discord?": DiscordConfig,
+  "telegram?": TelegramConfig,
+  "healthCheck?": HealthCheckConfig,
+  "chainConfigs?": type({ "[string]": ChainConfig }), // chainId -> ChainConfig
 });
+
+export type GlobalConfigType = typeof GlobalConfig.infer;

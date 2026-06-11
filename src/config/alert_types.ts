@@ -1,13 +1,12 @@
 import { type } from "arktype";
-import { DiscordConfig, TelegramConfig, PagerdutyConfig } from "./global_config";
-
+import { DiscordConfig, PagerdutyConfig, TelegramConfig } from "./notification_types";
 
 const ConsecutiveMissAlert = type({
   enabled: "boolean",
   threshold: "number", // blocks
   repeat: "boolean", // repeat the alert if not resolved, default false
   repeatInterval: "number", // seconds
-})
+});
 
 const PercentageMissAlert = type({
   enabled: "boolean",
@@ -15,7 +14,7 @@ const PercentageMissAlert = type({
   // Repeat the alert if not resolved, default false.
   // The repeat in this case will happen every time by increasing the threshold by 50%
   repeat: "boolean",
-})
+});
 
 // Part of the ChainConfig. Used to declare configuration how and when to raise the alert.
 export const AlertConfig = type({
@@ -35,12 +34,12 @@ export const AlertConfig = type({
   // Send alert if the validator is in the inactive set, jailed or tombstoned.
   alertIfInactive: "boolean",
 
-  // Telegram alert configuration. If you want to overwrite the global settings, else leave it empty.
-  telegram: TelegramConfig.or(type.undefined),
+  // Telegram alert config. If you want to overwrite the global settings, else leave it empty.
+  "telegram?": TelegramConfig,
 
-  // Pagerduty alert configuration. If you want to overwrite the global settings, else leave it empty.
-  pagerduty: PagerdutyConfig.or(type.undefined),
+  // Pagerduty alert config. If you want to overwrite the global settings, else leave it empty.
+  "pagerduty?": PagerdutyConfig,
 
-  // Discord alert configuration. If you want to overwrite the global settings, else leave it empty.
-  discord: DiscordConfig.or(type.undefined),
+  // Discord alert config. If you want to overwrite the global settings, else leave it empty.
+  "discord?": DiscordConfig,
 });

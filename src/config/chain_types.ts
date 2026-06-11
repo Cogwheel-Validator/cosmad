@@ -7,15 +7,16 @@ export const Apis = type({
 });
 
 export const ChainConfig = type({
-  chainId: "string",
   prettyName: "string",
   chainType: "'bft' | 'tm2'",
-  chainLogo: "string | undefined",
+  "chainLogo?": "string",
   valoperAddress: "string",
-  valconsAddress: "string | undefined", // only available for bft chains, leave undefined for tm2 chains
+  "valconsAddress?": "string", // only available for bft chains, leave undefined for tm2 chains
   rpcUrls: Apis.array(),
-  apiUrls: Apis.array().or(type.undefined),
+  "apiUrls?": Apis.array(), // only available for bft chains, leave undefined for tm2 chains
   /** How often to poll the RPC endpoint (ms). Defaults to 6 000. */
-  pollIntervalMs: "number | undefined",
+  "pollIntervalMs?": "number.integer",
   alertConfig: AlertConfig,
 });
+
+export type ChainConfigType = typeof ChainConfig.infer;
