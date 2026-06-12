@@ -1,6 +1,6 @@
 import { type DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import type { Logger } from "pino";
-import logger from "../logger/logger";
+import logger from "../logger";
 import { Alert, Block } from "./tables";
 
 export interface RodbQueryResult<T> {

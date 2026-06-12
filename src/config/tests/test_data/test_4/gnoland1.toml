@@ -1,0 +1,13 @@
+pretty_name = "Gnoland"
+chain_type = "tm2"
+valoper_address = "g1"
+rpc_urls = [
+  { url = "https://rpc.gno.land", alert_if_down = true }
+]
+
+alert_config = {
+  alert_if_inactive = true,
+  stalled_alert = { enabled = true, stalled_threshold = 60 },
+  consecutive_miss_alert = { enabled = true, threshold = 50, repeat = false, repeat_interval = 300 },
+  percentage_missed_blocks_alert = { enabled = false, threshold = 10.0, repeat = false }
+}

@@ -6,7 +6,7 @@ export { DiscordConfig, PagerdutyConfig, TelegramConfig };
 
 const HealthCheckConfig = type({
   enabled: "boolean",
-  endpoint: "string",
+  endpoint: "string.url",
   ping: "number.integer", // seconds
 });
 

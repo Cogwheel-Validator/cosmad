@@ -9,7 +9,7 @@ import {
   UBIGINT,
 } from "@duckdb/node-api";
 import type { Logger } from "pino";
-import logger from "../logger/logger";
+import logger from "../logger";
 import { generateCreateTableStatements } from "./sql/generate";
 import type { Constructor } from "./sql/types";
 import { Alert, Block } from "./tables";
@@ -153,7 +153,7 @@ export class RWDB {
     );
     const duckdbData = blocks.map((block) => block.toDuckDbData());
     const sql = `
-    INSERT INTO ${blocks[0]?.getTableName} 
+    INSERT INTO ${blocks[0]?.getTableName}
     VALUES ${duckdbData.map((data) => `(${data.height}, ${data.hash}, ${data.time}, ${data.signed}, ${data.signature ?? null})`).join(", ")}`;
     try {
       const result = await this.conn.run(sql);

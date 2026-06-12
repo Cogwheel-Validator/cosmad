@@ -2,7 +2,7 @@ import { type } from "arktype";
 import { AlertConfig } from "./alert_types";
 
 export const Apis = type({
-  url: "string.url.parse",
+  url: "string.url",
   alertIfDown: "boolean",
 });
 

@@ -1,0 +1,35 @@
+serve_api = true
+serve_dashboard = false
+
+[pagerduty]
+enabled = true
+service_key = "api123..."
+
+[discord]
+enabled = true
+webhook_url = "https://discord.com/api/webhooks/999999999999999999/abc123"
+
+[telegram]
+enabled = true
+bot_token = "5555555:AAAAAAAA"
+
+[health_check]
+enabled = true
+endpoint = "https://hc-ping.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+ping = 60
+
+[chain_configs.cosmoshub-4]
+pretty_name = "Cosmos Hub"
+chain_type = "bft"
+valoper_address = "cosmosvaloper1xyz"
+valcons_address = "cosmosvalcon1xyz"
+rpc_urls = [
+  { url = "https://rpc.cosmos.network", alert_if_down = true }
+]
+
+alert_config = {
+  alert_if_inactive = true,
+  stalled_alert = { enabled = true, stalled_threshold = 60 },
+  consecutive_miss_alert = { enabled = true, threshold = 50, repeat = false, repeat_interval = 300 },
+  percentage_missed_blocks_alert = { enabled = false, threshold = 10.0, repeat = false }
+}

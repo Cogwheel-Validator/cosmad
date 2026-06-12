@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
+import { ArkErrors } from "arktype";
 import camelcaseKeys from "camelcase-keys";
 import TOML from "smol-toml";
-import { ChainConfig, type ChainConfigType } from "./chain_types";
-import { GlobalConfig, type GlobalConfigType } from "./global_config";
-import { ArkErrors } from "arktype";
 import logger from "../pkgs/logger";
-import process from "node:process";
+import type { Result } from "../pkgs/models/result";
+import { ChainConfig, type ChainConfigType } from "./chain_types";
+import { ArkLoaderError, GeneralLoaderError } from "./errors";
+import { GlobalConfig, type GlobalConfigType } from "./global_config";
 
 const log = logger.child({ module: "config_dp_loader" });
 
@@ -15,8 +17,7 @@ const log = logger.child({ module: "config_dp_loader" });
  * @param filePath path to the config.toml
  * @returns the parsed and validated global config
  */
-export function loadGlobalConfig(filePath: string): GlobalConfigType {
-
+export function loadGlobalConfig(filePath: string): Result<GlobalConfigType, Error> {
   // If the main config is in any way invalid, exit the process.
   if (!filePath.endsWith(".toml")) {
     log.error(`Expected a .toml file, got ${filePath}`);
@@ -29,12 +30,22 @@ export function loadGlobalConfig(filePath: string): GlobalConfigType {
   const config = GlobalConfig(normalized);
 
   if (config instanceof ArkErrors) {
-    log.error(`Invalid global config: ${config.flatProblemsByPath}`);
-    process.exit(1);
+    log.error(`Invalid global config: ${config.summary}, ${config.flatProblemsByPath}`);
+    return {
+      ok: false,
+      error: new ArkLoaderError(
+        `Invalid global config: ${config.summary}, ${config.flatProblemsByPath}`,
+        { summary: config.summary, flatProblemsByPath: config.flatProblemsByPath },
+      ),
+    };
   }
 
-  validateGlobalConfig(config);
-  return config;
+  const vError = validateGlobalConfig(config);
+  if (vError) {
+    return { ok: false, error: vError };
+  }
+
+  return { ok: true, value: config };
 }
 
 /**
@@ -42,11 +53,12 @@ export function loadGlobalConfig(filePath: string): GlobalConfigType {
  * @param dirPath path to directory that contains the chain toml files.
  * @returns Map of chain id to chain config.
  */
-export function loadChainConfigs(dirPath: string): Map<string, ChainConfigType> {
+export function loadChainConfigs(dirPath: string): Result<Map<string, ChainConfigType>, Error> {
   const files = fs.readdirSync(dirPath).filter((f) => f.endsWith(".toml"));
 
   if (files.length === 0) {
-    return new Map();
+    // No chain config files found, return an empty map. Which is okay if there are chains in the global config.
+    return { ok: true, value: new Map() };
   }
 
   const configs = new Map<string, ChainConfigType>();
@@ -56,8 +68,9 @@ export function loadChainConfigs(dirPath: string): Map<string, ChainConfigType> 
     const chainId = path.basename(file, ".toml");
 
     if (chainIdSet.has(chainId)) {
-      log.error(`Duplicate chain config: ${chainId}`);
-      process.exit(1);
+      const error = `Duplicate chain config: ${chainId}`;
+      log.error(error);
+      return { ok: false, error: new GeneralLoaderError(error) };
     }
     chainIdSet.add(chainId);
 
@@ -67,23 +80,34 @@ export function loadChainConfigs(dirPath: string): Map<string, ChainConfigType> 
     const config = ChainConfig(normalized);
 
     if (config instanceof ArkErrors) {
-      log.error(`Invalid chain config: ${config.flatProblemsByPath}`);
-      process.exit(1);
+      const error = `Invalid chain config: ${config.summary}, ${config.flatProblemsByPath}`;
+      log.error(error);
+      return {
+        ok: false,
+        error: new ArkLoaderError(error, {
+          summary: config.summary,
+          flatProblemsByPath: config.flatProblemsByPath,
+        }),
+      };
     }
 
-    validateChainConfig(chainId, config);
+    const vError = validateChainConfig(chainId, config);
+    if (vError) {
+      return { ok: false, error: vError };
+    }
+
     configs.set(chainId, config);
   }
 
-  return configs;
+  return { ok: true, value: configs };
 }
 
 // Helper function to validate a chain config.
-function validateChainConfig(chainId: string, config: ChainConfigType) {
-
+function validateChainConfig(chainId: string, config: ChainConfigType): null | GeneralLoaderError {
   if (config.rpcUrls.length === 0) {
-    log.error(`Chain config is missing rpcUrls: ${chainId}`);
-    process.exit(1);
+    const error = `Chain config is missing rpcUrls: ${chainId}`;
+    log.error(error);
+    return new GeneralLoaderError(error);
   }
 
   // check RPC and API URLs and remove "/" at the last index.
@@ -102,21 +126,24 @@ function validateChainConfig(chainId: string, config: ChainConfigType) {
   }
 
   if (config.chainType === "bft" && !config.valconsAddress) {
-    log.error(`Chain config is missing valconsAddress: ${chainId}`);
-    process.exit(1);
+    const error = `Chain config is missing valconsAddress: ${chainId}`;
+    log.error(error);
+    return new GeneralLoaderError(error);
   }
 
+  return null;
 }
 
 // Helper function to validate the global config.
-function validateGlobalConfig(config: GlobalConfigType) {
+function validateGlobalConfig(config: GlobalConfigType): null | GeneralLoaderError {
   if (config.serveDashboard && !config.serveApi) {
-    log.error(`For dashboard to work, serveApi must be enabled`);
-    process.exit(1);
+    const error = `For dashboard to work, serveApi must be enabled`;
+    log.error(error);
+    return new GeneralLoaderError(error);
   }
 
-  const haveAlertEnabled = config.discord !== undefined ||
-    config.telegram !== undefined || config.pagerduty !== undefined;
+  const haveAlertEnabled =
+    config.discord !== undefined || config.telegram !== undefined || config.pagerduty !== undefined;
 
   if (!haveAlertEnabled) {
     log.warn(`No global alert enabled: discord, telegram, and pagerduty are all undefined`);
@@ -124,7 +151,12 @@ function validateGlobalConfig(config: GlobalConfigType) {
 
   if (config.chainConfigs) {
     for (const [chainId, chainConfig] of Object.entries(config.chainConfigs)) {
-      validateChainConfig(chainId, chainConfig);
+      const vError = validateChainConfig(chainId, chainConfig);
+      if (vError) {
+        return vError;
+      }
     }
   }
+
+  return null;
 }

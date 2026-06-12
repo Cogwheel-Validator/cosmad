@@ -7,10 +7,10 @@ export const PagerdutyConfig = type({
 
 export const DiscordConfig = type({
   enabled: "boolean",
-  webhookUrl: "string",
+  webhookUrl: "string.url",
 });
 
 export const TelegramConfig = type({
   enabled: "boolean",
-  apiToken: "string",
+  botToken: "string",
 });
