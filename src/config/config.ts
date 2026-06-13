@@ -10,7 +10,7 @@ import { ChainConfig, type ChainConfigType } from "./chain_types";
 import { ArkLoaderError, GeneralLoaderError } from "./errors";
 import { GlobalConfig, type GlobalConfigType } from "./global_config";
 
-const log = logger.child({ module: "config_dp_loader" });
+const log = logger.child({ module: "config" });
 
 /**
  * A helper function to load the global config from a toml file.
