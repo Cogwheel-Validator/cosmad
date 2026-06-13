@@ -2,8 +2,8 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { RODB } from "../ro_db";
-import { RWDB } from "../rw_db";
+import { RODB } from "../duckdb/ro_db";
+import { RWDB } from "../duckdb/rw_db";
 import { Alert } from "../tables";
 
 /**

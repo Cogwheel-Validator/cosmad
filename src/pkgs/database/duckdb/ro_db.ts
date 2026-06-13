@@ -1,20 +1,10 @@
 import { type DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import type { Logger } from "pino";
-import logger from "../logger";
-import { Alert, Block } from "./tables";
+import logger from "../../logger";
+import type { DbQueryResult, IReadDb } from "../interfaces";
+import { Alert, Block } from "../tables";
 
-export interface RodbQueryResult<T> {
-  success: boolean;
-  error?: string;
-  result?: T;
-}
-
-/**
- * Read-only DuckDB connection intended for API use. This instance opens the database
- * in READ_ONLY mode, meaning it can safely run alongside the RWDB writer without
- * risking concurrent write conflicts.
- */
-export class RODB {
+export class RODB implements IReadDb {
   chainId: string;
   conn: DuckDBConnection;
   log: Logger;
@@ -25,14 +15,6 @@ export class RODB {
     this.log = logger.child({ module: `RODB${chainId}` });
   }
 
-  /**
-   * Create a read-only DuckDB instance. The access_mode is always READ_ONLY and
-   * cannot be overridden via options.
-   * @param dbDir Directory where all of the databases are located.
-   * @param chainId Chain identifier which is usually tied to the blockchain.
-   * @param options Additional DuckDB options. See https://duckdb.org/docs/current/configuration/overview.
-   * @returns A RODB instance.
-   */
   public static async create(
     dbDir: string,
     chainId: string,
@@ -68,11 +50,7 @@ export class RODB {
     this.log.debug("Read-only database connection closed successfully");
   }
 
-  /**
-   * Get the latest block from the database.
-   * @returns The latest block or null if no blocks are found.
-   */
-  public async latestBlock(): Promise<RodbQueryResult<Block | null>> {
+  public async latestBlock(): Promise<DbQueryResult<Block | null>> {
     const sql = `SELECT * FROM blocks ORDER BY height DESC LIMIT 1`;
     try {
       const result = await this.conn.runAndReadAll(sql);
@@ -87,11 +65,7 @@ export class RODB {
     }
   }
 
-  /**
-   * Get the height of the latest block from the database.
-   * @returns The height of the latest block or null if no blocks are found.
-   */
-  public async latestBlockHeight(): Promise<RodbQueryResult<bigint | null>> {
+  public async latestBlockHeight(): Promise<DbQueryResult<bigint | null>> {
     const sql = `SELECT height FROM blocks ORDER BY height DESC LIMIT 1`;
     try {
       const result = await this.conn.runAndReadAll(sql);
@@ -106,12 +80,7 @@ export class RODB {
     }
   }
 
-  /**
-   * Get an alert by its dedup key (alertId). The key is generated via
-   * `Alert.generateKey(chainId, alertType)`.
-   * @param alertKey The SHA-256 dedup key to look up.
-   */
-  public async getAlert(alertKey: string): Promise<RodbQueryResult<Alert | null>> {
+  public async getAlert(alertKey: string): Promise<DbQueryResult<Alert | null>> {
     const sql = `SELECT * FROM alerts WHERE alert_id = '${alertKey}' LIMIT 1`;
     try {
       const result = await this.conn.runAndReadAll(sql);
@@ -126,11 +95,7 @@ export class RODB {
     }
   }
 
-  /**
-   * Get all alerts that have not yet been closed (closed_at IS NULL).
-   * @returns All open alerts ordered by oldest first.
-   */
-  public async getUnclosedAlerts(): Promise<RodbQueryResult<Alert[]>> {
+  public async getUnclosedAlerts(): Promise<DbQueryResult<Alert[]>> {
     const sql = `SELECT * FROM alerts WHERE closed_at IS NULL ORDER BY opened_at ASC`;
     try {
       const result = await this.conn.runAndReadAll(sql);

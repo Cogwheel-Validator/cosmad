@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { RWDB } from "../rw_db";
+import { RWDB } from "../duckdb/rw_db";
 import { Alert, Block } from "../tables";
 
 const testDir = join(tmpdir(), `cosmad_test_rw_${Date.now()}`);
