@@ -1,14 +1,11 @@
 import { type } from "arktype";
 import { ChainConfig } from "./chain_types";
-import { DiscordConfig, PagerdutyConfig, TelegramConfig } from "./notification_types";
-
-export { DiscordConfig, PagerdutyConfig, TelegramConfig };
-
-const HealthCheckConfig = type({
-  enabled: "boolean",
-  endpoint: "string.url",
-  ping: "number.integer", // seconds
-});
+import {
+  DiscordConfig,
+  HealthCheckConfig,
+  PagerdutyConfig,
+  TelegramConfig,
+} from "./notification_types";
 
 export const GlobalConfig = type({
   serveApi: "boolean",
