@@ -117,11 +117,3 @@ export const BlockCommitSchema = type({
 export type RpcError = typeof RpcError.infer;
 export type RpcStatusResponse = typeof RpcStatusSchema.infer;
 export type BlockCommitResponse = typeof BlockCommitSchema.infer;
-
-// Generalized response type combined with ark
-export type Response<T> = {
-  ok: boolean;
-  data?: T;
-  error?: string;
-  problemsByPath?: Record<string, string[]>;
-};

@@ -1,9 +1,10 @@
+import type { Response } from "../response";
 import { getCommit, getStatus } from "./universal_rpc_query";
-import type { BlockCommitResponse, Response, RpcStatusResponse } from "./universal_types";
+import type { BlockCommitResponse, RpcStatusResponse } from "./universal_types";
 
 const MAX_HEIGHT_DIFFERENCE = 20;
 
-// Minimalistic RPC client for Cosmos-based chains.
+// Minimalistic RPC client.
 export class RpcClient {
   readonly chainId: string;
   readonly rpcUrls: string[];
@@ -42,11 +43,11 @@ export class RpcClient {
     const responsiveRpcUrls = new Map<string, number>();
     const results = await Promise.all(
       this.rpcUrls.map(async (rpcUrl) => {
-        try {
-          const status = await getStatus(rpcUrl);
-          return { rpcUrl, ok: status.ok, data: status.data };
-        } catch {
-          return { rpcUrl, ok: false, data: null };
+        const status = await getStatus(rpcUrl);
+        if (status.ok) {
+          return { rpcUrl, ok: true as const, data: status.data };
+        } else {
+          return { rpcUrl, ok: false as const, error: status.error };
         }
       }),
     );
@@ -58,10 +59,10 @@ export class RpcClient {
       if (result.ok) {
         // Small basic checker here. If it fails here it won't make it on the list.
         if (
-          this.chainId === result.data?.result.nodeInfo.network &&
-          result.data?.result.syncInfo.catchingUp === false
+          this.chainId === result.data.result.nodeInfo.network &&
+          result.data.result.syncInfo.catchingUp === false
         ) {
-          const height = Number(result.data?.result.syncInfo.latestBlockHeight ?? 0);
+          const height = Number(result.data.result.syncInfo.latestBlockHeight ?? 0);
           if (height > highestHeight) {
             highestHeight = height;
             responsiveRpcUrls.set(result.rpcUrl, height);
@@ -93,6 +94,6 @@ export class RpcClient {
 
   // Wrapper for getCommit query
   public async getCommit(rpcUrl: string, height?: number): Promise<Response<BlockCommitResponse>> {
-    return getCommit(rpcUrl, height);
+    return getCommit(rpcUrl, undefined, height);
   }
 }

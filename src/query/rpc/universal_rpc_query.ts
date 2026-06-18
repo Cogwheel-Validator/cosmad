@@ -1,10 +1,10 @@
 import { ArkErrors } from "arktype";
 import axios from "axios";
 import camelcaseKeys from "camelcase-keys";
+import type { Response } from "../response";
 import {
   type BlockCommitResponse,
   BlockCommitSchema,
-  type Response,
   type RpcStatusResponse,
   RpcStatusSchema,
 } from "./universal_types";
@@ -19,10 +19,13 @@ type RpcError = {
  * @param rpcUrl - The URL of the RPC endpoint to query.
  * @returns A response containing the parsed status data if successful, or an error if not.
  */
-export async function getStatus(rpcUrl: string): Promise<Response<RpcStatusResponse>> {
+export async function getStatus(
+  rpcUrl: string,
+  timeout: number = 5000,
+): Promise<Response<RpcStatusResponse>> {
   const queryUrl = `${rpcUrl}/status`;
   try {
-    const response = await axios.get(queryUrl, { timeout: 5000 });
+    const response = await axios.get(queryUrl, { timeout });
     const normalized = camelcaseKeys(response.data, { deep: true });
     const statusParsed = RpcStatusSchema(normalized);
     if (statusParsed instanceof ArkErrors) {
@@ -45,7 +48,7 @@ export async function getStatus(rpcUrl: string): Promise<Response<RpcStatusRespo
         ${error.config?.url}`,
       };
     } else {
-      return { ok: false, error: "Unknown error while querying RPC status" };
+      return { ok: false, error: `Unknown error, ${error}` };
     }
   }
 }
@@ -59,11 +62,12 @@ export async function getStatus(rpcUrl: string): Promise<Response<RpcStatusRespo
  */
 export async function getCommit(
   rpcUrl: string,
+  timeout: number = 5000,
   height?: number,
 ): Promise<Response<BlockCommitResponse>> {
   const queryUrl = `${rpcUrl}/commit${height ? `?height=${height}` : ""}`;
   try {
-    const response = await axios.get(queryUrl, { timeout: 5000 });
+    const response = await axios.get(queryUrl, { timeout });
     const normalized = camelcaseKeys(response.data, { deep: true });
     const commitParsed = BlockCommitSchema(normalized);
     if (commitParsed instanceof ArkErrors) {
