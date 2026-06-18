@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ArkErrors } from "arktype";
 import camelcaseKeys from "camelcase-keys";
 import { describe, expect, test } from "vitest";
-import { type BlockCommitResponse, BlockCommitSchema, RpcStatusSchema } from "../universal_types";
+import { type BlockCommitResponse, BlockCommitSchema, RpcStatusSchema } from "../types";
 
 const testDataDir = join(import.meta.dirname, "test_data");
 const status = JSON.parse(readFileSync(join(testDataDir, "test_status.json"), "utf8"));

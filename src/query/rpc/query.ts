@@ -7,7 +7,7 @@ import {
   BlockCommitSchema,
   type RpcStatusResponse,
   RpcStatusSchema,
-} from "./universal_types";
+} from "./types";
 
 type RpcError = {
   message: string;

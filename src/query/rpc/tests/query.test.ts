@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { AxiosResponse } from "axios";
 import axios from "axios";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { getCommit, getStatus } from "../universal_rpc_query";
+import { getCommit, getStatus } from "../query";
 
 vi.mock("axios");
 

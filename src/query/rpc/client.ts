@@ -1,6 +1,6 @@
 import type { Response } from "../response";
-import { getCommit, getStatus } from "./universal_rpc_query";
-import type { BlockCommitResponse, RpcStatusResponse } from "./universal_types";
+import { getCommit, getStatus } from "./query";
+import type { BlockCommitResponse, RpcStatusResponse } from "./types";
 
 const MAX_HEIGHT_DIFFERENCE = 20;
 
