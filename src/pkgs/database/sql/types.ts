@@ -1,14 +1,14 @@
 export enum AllowedTypes {
   BOOLEAN = "BOOLEAN",
-  BIGINT = "BIGINT",
+  BIGINT = "INT8",
   BYTEA = "BYTEA",
   DOUBLE = "DOUBLE",
-  INTEGER = "INTEGER",
+  INTEGER = "INT4",
   JSON = "JSON",
   TEXT = "TEXT",
-  TINIINT = "TINIINT",
+  TINYINT = "INT1",
   TIMESTAMP = "TIMESTAMP",
-  UBIGINT = "UBIGINT",
+  UBIGINT = "UINT8",
   VARCHAR = "VARCHAR",
 }
 

@@ -1,27 +1,22 @@
 import { createHash } from "node:crypto";
-import { DuckDBBlobValue, DuckDBTimestampValue, type DuckDBValue } from "@duckdb/node-api";
 import { Column, Table } from "./sql/decorators";
 import { AllowedTypes } from "./sql/types";
 
 interface BlockOptions {
+  chainId: string;
   height: bigint;
   hash: string;
   time: Date;
-  signed: boolean;
+  signed: number;
   signature?: string;
   chainType: "bft" | "tm2";
 }
 
-export interface BlockDuckDbData {
-  height: bigint;
-  hash: DuckDBBlobValue;
-  time: DuckDBTimestampValue;
-  signed: boolean;
-  signature: DuckDBBlobValue | null;
-}
-
 @Table("blocks")
 export class Block {
+  @Column({ name: "chain_id", type: AllowedTypes.TEXT, primary: true, nullable: false })
+  chainId: string;
+
   @Column({ name: "height", type: AllowedTypes.UBIGINT, primary: true, nullable: false })
   height: bigint;
 
@@ -31,56 +26,40 @@ export class Block {
   @Column({ name: "time", type: AllowedTypes.TIMESTAMP, nullable: false })
   time: Date;
 
-  @Column({ name: "signed", type: AllowedTypes.BOOLEAN, nullable: false, index: true })
-  signed: boolean;
+  // -1 = Wasn't active, 0 = Active but missed, 1 = Active and signed
+  @Column({ name: "signed", type: AllowedTypes.TINYINT, nullable: false, index: true })
+  signed: number;
 
   @Column({ name: "signature", type: AllowedTypes.BYTEA, nullable: true })
   signature?: Buffer;
 
+  private hashFn = (opt: BlockOptions): Buffer => {
+    switch (opt.chainType) {
+      case "bft":
+        return Buffer.from(opt.hash, "hex");
+      case "tm2":
+        return Buffer.from(opt.hash, "base64");
+      default:
+        throw new Error(`Unknown chain type: ${opt.chainType}`);
+    }
+  };
+
+  private numCheck = (opt: BlockOptions): number => {
+    if (opt.signed >= -1 && opt.signed <= 1) {
+      return opt.signed;
+    }
+    throw new Error(`Invalid signed value: ${opt.signed}`);
+  };
+
   constructor(options: BlockOptions) {
-    const hash = (): Buffer => {
-      switch (options.chainType) {
-        case "bft":
-          return Buffer.from(options.chainType, "hex");
-        case "tm2":
-          return Buffer.from(options.chainType, "base64");
-        default:
-          throw new Error(`Unknown chain type: ${options.chainType}`);
-      }
-    };
+    this.chainId = options.chainId;
     this.height = options.height;
-    this.hash = hash();
+    this.hash = this.hashFn(options);
     this.time = options.time;
-    this.signed = options.signed;
+    this.signed = this.numCheck(options);
     if (options.signature !== undefined) {
       this.signature = Buffer.from(options.signature, "base64");
     }
-  }
-
-  public get getTableName() {
-    return "blocks";
-  }
-
-  public toDuckDbData(): BlockDuckDbData {
-    return {
-      height: this.height,
-      hash: new DuckDBBlobValue(this.hash),
-      time: new DuckDBTimestampValue(BigInt(this.time.getTime()) * 1000n),
-      signed: this.signed,
-      signature: this.signature != null ? new DuckDBBlobValue(this.signature) : null,
-    };
-  }
-
-  public static fromDuckDbData(data: Record<string, DuckDBValue>): Block {
-    const block = Object.create(Block.prototype) as Block;
-    block.height = data.height as bigint;
-    block.hash = Buffer.from((data.hash as DuckDBBlobValue).bytes);
-    block.time = new Date(Number((data.time as DuckDBTimestampValue).micros) / 1000);
-    block.signed = data.signed as boolean;
-    if (data.signature != null) {
-      block.signature = Buffer.from((data.signature as DuckDBBlobValue).bytes);
-    }
-    return block;
   }
 }
 
@@ -90,14 +69,8 @@ interface AlertOptions {
   alertType: string;
   openedAt: Date;
   closedAt?: Date;
-}
-
-export interface AlertDuckDbData {
-  alertId: string;
-  chainId: string;
-  alertType: string;
-  openedAt: DuckDBTimestampValue;
-  closedAt: DuckDBTimestampValue | null;
+  lastNotifiedAt?: Date;
+  repeatCount?: number;
 }
 
 @Table("alerts")
@@ -123,31 +96,29 @@ export class Alert {
   @Column({ name: "closed_at", type: AllowedTypes.TIMESTAMP, nullable: true })
   closedAt?: Date;
 
+  @Column({ name: "last_notified_at", type: AllowedTypes.TIMESTAMP, nullable: true })
+  lastNotifiedAt?: Date;
+
+  @Column({
+    name: "repeat_count",
+    type: AllowedTypes.INTEGER,
+    nullable: false,
+    default: "0",
+  })
+  repeatCount: number;
+
   constructor(options: AlertOptions) {
     this.alertId = options.alertId;
     this.chainId = options.chainId;
     this.alertType = options.alertType;
     this.openedAt = options.openedAt;
+    this.repeatCount = options.repeatCount ?? 0;
     if (options.closedAt !== undefined) {
       this.closedAt = options.closedAt;
     }
-  }
-
-  public get getTableName() {
-    return "alerts";
-  }
-
-  public toDuckDbData(): AlertDuckDbData {
-    return {
-      alertId: this.alertId,
-      chainId: this.chainId,
-      alertType: this.alertType,
-      openedAt: new DuckDBTimestampValue(BigInt(this.openedAt.getTime()) * 1000n),
-      closedAt:
-        this.closedAt != null
-          ? new DuckDBTimestampValue(BigInt(this.closedAt.getTime()) * 1000n)
-          : null,
-    };
+    if (options.lastNotifiedAt !== undefined) {
+      this.lastNotifiedAt = options.lastNotifiedAt;
+    }
   }
 
   /**
@@ -156,17 +127,5 @@ export class Alert {
    */
   public static generateKey(chainId: string, alertType: string): string {
     return createHash("sha256").update(`${chainId}:${alertType}`).digest("hex");
-  }
-
-  public static fromDuckDbData(data: Record<string, DuckDBValue>): Alert {
-    const alert = Object.create(Alert.prototype) as Alert;
-    alert.alertId = data.alert_id as string;
-    alert.chainId = data.chain_id as string;
-    alert.alertType = data.alert_type as string;
-    alert.openedAt = new Date(Number((data.opened_at as DuckDBTimestampValue).micros) / 1000);
-    if (data.closed_at != null) {
-      alert.closedAt = new Date(Number((data.closed_at as DuckDBTimestampValue).micros) / 1000);
-    }
-    return alert;
   }
 }
