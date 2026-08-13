@@ -1,0 +1,8 @@
+#!/bin/sh
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not found on PATH, install with:" >&2
+  echo "  go install github.com/zricethezav/gitleaks@latest" >&2
+  exit 1
+fi
+
+gitleaks protect --staged -v

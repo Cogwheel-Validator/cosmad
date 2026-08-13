@@ -1,0 +1,17 @@
+#!/bin/sh
+# Lint commit messages to be of appropriate format.
+pnpm dlx commitlint --edit $1
+# Check the grammar of the commit message.
+# It might make mistakes but it should catch some common typos.
+if [[ $TYPO_CHECK = 0 ]]; then
+  echo "grammar check disabled"
+  exit 0
+fi
+
+if ! command -v typos -h >/dev/null 2>&1; then
+  echo "typos is not installed, consider disabling the grammar check with TYPO=0"
+  echo "or install it with `cargo install typos-cli --locked`"
+  exit 1
+fi
+
+typos $1
