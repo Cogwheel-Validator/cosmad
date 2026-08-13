@@ -5,10 +5,10 @@ import { AllowedTypes } from "./sql/types";
 interface BlockOptions {
   chainId: string;
   height: bigint;
-  hash: string;
+  hash: string | Buffer;
   time: Date;
   signed: number;
-  signature?: string;
+  signature: string | Buffer | undefined;
   chainType: "bft" | "tm2";
 }
 
@@ -31,14 +31,19 @@ export class Block {
   signed: number;
 
   @Column({ name: "signature", type: AllowedTypes.BYTEA, nullable: true })
-  signature?: Buffer;
+  signature: Buffer | undefined;
+
+  chainType: "bft" | "tm2";
 
   private hashFn = (opt: BlockOptions): Buffer => {
-    switch (opt.chainType) {
+    if (opt.hash instanceof Buffer) {
+      return opt.hash;
+    }
+    switch (this.chainType) {
       case "bft":
-        return Buffer.from(opt.hash, "hex");
+        return Buffer.from(opt.hash as string, "hex");
       case "tm2":
-        return Buffer.from(opt.hash, "base64");
+        return Buffer.from(opt.hash as string, "base64");
       default:
         throw new Error(`Unknown chain type: ${opt.chainType}`);
     }
@@ -51,15 +56,40 @@ export class Block {
     throw new Error(`Invalid signed value: ${opt.signed}`);
   };
 
+  private signatureFn = (opt: BlockOptions): Buffer | undefined => {
+    if (opt.signature instanceof Buffer) {
+      return opt.signature;
+    } else if (typeof opt.signature === "string") {
+      return Buffer.from(opt.signature, "base64");
+    }
+    return undefined;
+  };
+
   constructor(options: BlockOptions) {
     this.chainId = options.chainId;
     this.height = options.height;
+    this.chainType = options.chainType;
     this.hash = this.hashFn(options);
     this.time = options.time;
     this.signed = this.numCheck(options);
-    if (options.signature !== undefined) {
-      this.signature = Buffer.from(options.signature, "base64");
+    this.signature = this.signatureFn(options);
+  }
+
+  // blockSignature returns a base64 representation of the signature, if it exists
+  public get blockSignature(): string | undefined {
+    return this.signature != null ? this.signature.toString("base64") : undefined;
+  }
+
+  public get blockHash(): string {
+    switch (this.chainType) {
+      case "bft":
+        return this.hash.toString("hex");
+      case "tm2":
+        return this.hash.toString("base64");
     }
+    // unsupported chain type, return empty string
+    // should never happen in theory
+    return "";
   }
 }
 

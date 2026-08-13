@@ -7,6 +7,8 @@ import type { Alert, Block } from "./tables";
 export interface IReadDb {
   latestBlock(): Promise<Result<Block | null, Error>>;
   latestBlockHeight(): Promise<Result<bigint | null, Error>>;
+  getBlockByHeight(height: bigint): Promise<Result<Block | null, Error>>;
+  getBlockByRange(startHeight: bigint, endHeight: bigint): Promise<Result<Block[], Error>>;
   getChainSignedPercentage(days: number): Promise<Result<ChainSignatureStats | null, Error>>;
   getAlert(alertKey: string): Promise<Result<Alert | null, Error>>;
   getUnclosedAlerts(): Promise<Result<Alert[], Error>>;

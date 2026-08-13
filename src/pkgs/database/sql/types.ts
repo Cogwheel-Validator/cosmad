@@ -8,7 +8,7 @@ export enum AllowedTypes {
   TEXT = "TEXT",
   TINYINT = "INT1",
   TIMESTAMP = "TIMESTAMP",
-  UBIGINT = "UINT8",
+  UBIGINT = "UBIGINT",
   VARCHAR = "VARCHAR",
 }
 

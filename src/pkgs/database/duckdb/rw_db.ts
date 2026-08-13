@@ -1,65 +1,71 @@
 import { existsSync, mkdirSync } from "node:fs";
 import {
   BLOB,
-  BOOLEAN,
   type DuckDBConnection,
   DuckDBDataChunk,
   DuckDBInstance,
+  DuckDBTimestampValue,
   TIMESTAMP,
+  TINYINT,
   UBIGINT,
+  VARCHAR,
 } from "@duckdb/node-api";
 import type { Logger } from "pino";
 import logger from "../../logger";
-import type { DbQueryResult, DbWriteResult, IWriteDb } from "../interfaces";
+import type { Result } from "../../models/result";
+import type { ChainSignatureStats } from "../analytics";
+import type { IWriteDb } from "../interfaces";
 import { generateCreateTableStatements } from "../sql/generate";
 import type { Constructor } from "../sql/types";
 import { Alert, Block } from "../tables";
+import { alertToRow, blockToRow, rowToAlert, rowToBlock, rowToSignStats } from "./mappers";
+import { ChainScopedDb } from "./scoped";
 
-export class RWDB implements IWriteDb {
-  chainId: string;
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+export interface DuckDbOptions {
+  threads: string;
+  memoryLimit: string;
+  maxTempDirectorySize?: string;
+}
+
+// A duckdb instance that can read and write data.
+export class RWDB {
   conn: DuckDBConnection;
   log: Logger;
 
-  private constructor(chainId: string, conn: DuckDBConnection) {
-    this.chainId = chainId;
+  // Private constructor, use create() instead.
+  private constructor(conn: DuckDBConnection) {
     this.conn = conn;
-    this.log = logger.child({ module: `RWDB${chainId}` });
+    this.log = logger.child({ module: "RWDB" });
   }
 
-  public static async create(
-    dbDir: string,
-    chainId: string,
-    options?: Record<string, string>,
-  ): Promise<RWDB> {
-    const chainDir = `${dbDir}/${chainId}`;
-    const tempDir = `${chainDir}/temp/`;
+  /**
+   * Creates the shared RWDB, using the specified database directory.
+   * @param dbDir path to the directory where the database file will be stored
+   * @returns a new RWDB instance
+   */
+  public static async create(dbDir: string, options: DuckDbOptions): Promise<RWDB> {
+    const tempDir = `${dbDir}/temp/`;
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true });
     }
 
-    const defaultOptions: Record<string, string> = {
-      threads: "2",
-      memory_limit: "500MB",
+    const dbOptions: Record<string, string> = {
+      threads: options.threads,
+      memory_limit: options.memoryLimit,
       temp_directory: tempDir,
       access_mode: "READ_WRITE",
-      max_temp_directory_size: "1GB",
+      max_temp_directory_size: options.maxTempDirectorySize ?? "4GB",
     };
-    if (options) {
-      for (const [key, value] of Object.entries(options)) {
-        if (key === "access_mode") {
-          continue;
-        }
-        defaultOptions[key] = value;
-      }
-    }
 
-    const conn = await DuckDBInstance.create(`${dbDir}/${chainId}.duckdb`, defaultOptions).then(
-      (instance) => instance.connect(),
-    );
+    const instance = await DuckDBInstance.create(`${dbDir}/cosmad.duckdb`, dbOptions);
+    const conn = await instance.connect();
 
-    const rwdb = new RWDB(chainId, conn);
+    const rwdb = new RWDB(conn);
     rwdb.log.info("Database connection established successfully");
-    rwdb.log.debug("Database options: %o", defaultOptions);
     await rwdb.initSchema();
     return rwdb;
   }
@@ -79,19 +85,25 @@ export class RWDB implements IWriteDb {
     this.log.debug("Database connection closed successfully");
   }
 
-  public async appendBlocks(blocks: Block[]): Promise<DbWriteResult> {
-    this.log.debug("Appending %d blocks to the database", blocks.length);
+  /** A view over this shared RWDB scoped to one chain, for in-process callers that want IWriteDb. */
+  public forChain(chainId: string, chainType: "bft" | "tm2"): IWriteDb {
+    return new ChainScopedDb(this, chainId, chainType);
+  }
+
+  public async appendBlocks(chainId: string, blocks: Block[]): Promise<Result<undefined, Error>> {
+    this.log.debug("Appending %d blocks for %s to the database", blocks.length, chainId);
     this.log.info(
       "Inserting from %s to %s",
       blocks[0]?.height.toString(),
       blocks[blocks.length - 1]?.height.toString(),
     );
-    const duckdbData = blocks.map((block) => block.toDuckDbData());
+    const duckdbData = blocks.map((block) => blockToRow(block));
     try {
       const appender = await this.conn.createAppender("blocks");
-      const chunk = DuckDBDataChunk.create([UBIGINT, BLOB, TIMESTAMP, BOOLEAN, BLOB]);
+      const chunk = DuckDBDataChunk.create([VARCHAR, UBIGINT, BLOB, TIMESTAMP, TINYINT, BLOB]);
       chunk.setRows(
         duckdbData.map((data) => [
+          data.chainId,
           data.height,
           data.hash,
           data.time,
@@ -102,116 +114,278 @@ export class RWDB implements IWriteDb {
       appender.appendDataChunk(chunk);
       appender.closeSync();
       this.log.info("Blocks appended successfully");
-      return { success: true };
+      return { ok: true, value: undefined };
     } catch (error) {
       this.log.error("Error appending blocks: %s", error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
     }
   }
 
-  public async insertBlocks(blocks: Block[]): Promise<DbWriteResult> {
-    this.log.debug("Inserting %d blocks into the database", blocks.length);
+  public async insertBlocks(chainId: string, blocks: Block[]): Promise<Result<void, Error>> {
+    this.log.debug("Inserting %d blocks for %s into the database", blocks.length, chainId);
     this.log.info(
       "Inserting from %s to %s",
       blocks[0]?.height.toString(),
       blocks[blocks.length - 1]?.height.toString(),
     );
-    const duckdbData = blocks.map((block) => block.toDuckDbData());
-    const sql = `
-    INSERT INTO ${blocks[0]?.getTableName}
-    VALUES ${duckdbData.map((data) => `(${data.height}, ${data.hash}, ${data.time}, ${data.signed}, ${data.signature ?? null})`).join(", ")}`;
+    const duckdbData = blocks.map((block) => blockToRow(block));
+    const placeholders = duckdbData.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const sql = `INSERT INTO blocks VALUES ${placeholders}`;
+    const values = duckdbData.flatMap((data) => [
+      data.chainId,
+      data.height,
+      data.hash,
+      data.time,
+      data.signed,
+      data.signature ?? null,
+    ]);
     try {
-      const result = await this.conn.run(sql);
+      const result = await this.conn.run(sql, values);
       this.log.debug("Insert result: %o", result);
       this.log.info("Blocks inserted successfully");
-      return { success: true };
+      return { ok: true, value: undefined };
     } catch (error) {
       this.log.error("Error inserting blocks: %s", error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
     }
   }
 
-  public async latestBlock(): Promise<DbQueryResult<Block | null>> {
-    const sql = `SELECT * FROM blocks ORDER BY height DESC LIMIT 1`;
+  public async latestBlock(
+    chainId: string,
+    chainType: "bft" | "tm2",
+  ): Promise<Result<Block | null, Error>> {
+    const sql = `
+      SELECT
+        chain_id,
+        height,
+        hash,
+        time,
+        signed,
+        signature
+      FROM blocks
+      WHERE chain_id = ?
+      ORDER BY height DESC LIMIT 1`;
     try {
-      const result = await this.conn.runAndReadAll(sql);
-      const rows = result.getRowObjects();
-      if (rows.length === 0) {
-        return { success: true, result: null };
-      }
-      return { success: true, result: Block.fromDuckDbData(rows[0]) };
+      const result = await this.conn.runAndReadAll(sql, [chainId]);
+      const row = result.getRowObjects(); // only 1 row
+      if (row.length === 0) return { ok: true, value: null };
+      return { ok: true, value: rowToBlock(row[0], chainType) };
     } catch (error) {
       this.log.error("Error getting latest block: %s", error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
     }
   }
 
-  public async latestBlockHeight(): Promise<DbQueryResult<bigint | null>> {
-    const sql = `SELECT height FROM blocks ORDER BY height DESC LIMIT 1`;
+  public async latestBlockHeight(chainId: string): Promise<Result<bigint | null, Error>> {
+    const sql = `SELECT height FROM blocks WHERE chain_id = ? ORDER BY height DESC LIMIT 1`;
     try {
-      const result = await this.conn.runAndReadAll(sql);
+      const result = await this.conn.runAndReadAll(sql, [chainId]);
       const rows = result.getRows();
       if (rows.length === 0) {
-        return { success: true, result: null };
+        return { ok: true, value: null };
       }
-      return { success: true, result: rows[0][0] as bigint };
+      return { ok: true, value: rows[0][0] as bigint };
     } catch (error) {
       this.log.error("Error getting latest block height: %s", error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
     }
   }
 
-  public async insertAlert(alert: Alert): Promise<DbWriteResult> {
+  public async insertAlert(alert: Alert): Promise<Result<void, Error>> {
     this.log.debug("Inserting alert %s into the database", alert.alertId);
-    const openedAt = alert.openedAt.toISOString().replace("T", " ").replace("Z", "");
-    const closedAt =
-      alert.closedAt != null
-        ? `'${alert.closedAt.toISOString().replace("T", " ").replace("Z", "")}'`
-        : "NULL";
+    const row = alertToRow(alert);
     const sql = `
-      INSERT INTO alerts (alert_id, chain_id, alert_type, opened_at, closed_at)
-      VALUES (
-        '${alert.alertId}',
-        '${alert.chainId}',
-        '${alert.alertType}',
-        '${openedAt}',
-        ${closedAt}
-      )
+      INSERT INTO alerts
+        (alert_id, chain_id, alert_type, opened_at, closed_at, last_notified_at, repeat_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
+    const values = [
+      row.alertId,
+      row.chainId,
+      row.alertType,
+      row.openedAt,
+      row.closedAt,
+      row.lastNotifiedAt,
+      row.repeatCount,
+    ];
     try {
-      await this.conn.run(sql);
+      await this.conn.run(sql, values);
       this.log.info("Alert %s inserted successfully", alert.alertId);
-      return { success: true };
+      return { ok: true, value: undefined };
     } catch (error) {
       this.log.error("Error inserting alert %s: %s", alert.alertId, error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
     }
   }
 
-  public async getAlert(alertKey: string): Promise<DbQueryResult<Alert | null>> {
-    const sql = `SELECT * FROM alerts WHERE alert_id = '${alertKey}' LIMIT 1`;
+  public async getAlert(alertKey: string): Promise<Result<Alert | null, Error>> {
+    const sql = `
+      SELECT
+        alert_id,
+        chain_id,
+        alert_type,
+        opened_at,
+        closed_at,
+        last_notified_at,
+        repeat_count
+      FROM alerts
+      WHERE alert_id = ?
+      LIMIT 1`;
     try {
-      const result = await this.conn.runAndReadAll(sql);
+      const result = await this.conn.runAndReadAll(sql, [alertKey]);
       const rows = result.getRowObjects();
       if (rows.length === 0) {
-        return { success: true, result: null };
+        return { ok: true, value: null };
       }
-      return { success: true, result: Alert.fromDuckDbData(rows[0]) };
+      return { ok: true, value: rowToAlert(rows[0]) };
     } catch (error) {
       this.log.error("Error getting alert %s: %s", alertKey, error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
     }
   }
 
-  public async getUnclosedAlerts(): Promise<DbQueryResult<Alert[]>> {
-    const sql = `SELECT * FROM alerts WHERE closed_at IS NULL ORDER BY opened_at ASC`;
+  public async getUnclosedAlerts(chainId: string): Promise<Result<Alert[], Error>> {
+    const sql = `
+      SELECT
+        alert_id,
+        chain_id,
+        alert_type,
+        opened_at,
+        closed_at,
+        last_notified_at,
+        repeat_count
+      FROM alerts
+      WHERE
+        chain_id = ? AND
+        closed_at IS NULL
+      ORDER BY opened_at ASC`;
     try {
-      const result = await this.conn.runAndReadAll(sql);
+      const result = await this.conn.runAndReadAll(sql, [chainId]);
       const rows = result.getRowObjects();
-      return { success: true, result: rows.map((row) => Alert.fromDuckDbData(row)) };
+      return { ok: true, value: rows.map((row) => rowToAlert(row)) };
     } catch (error) {
       this.log.error("Error getting unclosed alerts: %s", error);
-      return { success: false, error: error as string };
+      return { ok: false, error: toError(error) };
+    }
+  }
+
+  public async closeAlert(alertId: string, closedAt: Date): Promise<Result<void, Error>> {
+    const ts = new DuckDBTimestampValue(BigInt(closedAt.getTime()) * 1000n);
+    const sql = `UPDATE alerts SET closed_at = ? WHERE alert_id = ?`;
+    try {
+      await this.conn.run(sql, [ts, alertId]);
+      this.log.info("Alert %s closed at %s", alertId, closedAt.toISOString());
+      return { ok: true, value: undefined };
+    } catch (error) {
+      this.log.error("Error closing alert %s: %s", alertId, error);
+      return { ok: false, error: toError(error) };
+    }
+  }
+
+  public async touchAlertNotified(
+    alertId: string,
+    notifiedAt: Date,
+    repeatCount: number,
+  ): Promise<Result<void, Error>> {
+    const ts = new DuckDBTimestampValue(BigInt(notifiedAt.getTime()) * 1000n);
+    const sql = `UPDATE alerts SET last_notified_at = ?, repeat_count = ? WHERE alert_id = ?`;
+    try {
+      await this.conn.run(sql, [ts, repeatCount, alertId]);
+      this.log.debug("Alert %s marked notified (repeatCount=%d)", alertId, repeatCount);
+      return { ok: true, value: undefined };
+    } catch (error) {
+      this.log.error("Error touching alert %s: %s", alertId, error);
+      return { ok: false, error: toError(error) };
+    }
+  }
+
+  public async getChainSignedPercentage(
+    chainId: string,
+    days: number,
+  ): Promise<Result<ChainSignatureStats | null, Error>> {
+    const sql = `
+      WITH current_time AS (
+        SELECT current_timestamp() as now
+      ),
+      missed AS (
+        SELECT count() * 1.0 as missed
+        FROM blocks
+        CROSS JOIN current_time
+        WHERE chain_id = ? AND time >= current_time.now - INTERVAL '? days' AND time <= current_time.now
+      ),
+      total AS (
+        SELECT count() * 1.0 as total
+        FROM blocks
+        CROSS JOIN current_time
+        WHERE chain_id = ? AND time >= current_time.now - INTERVAL '? days' AND time <= current_time.now
+      )
+      SELECT
+        (t.total - m.missed) / t.total as signed,
+        m.missed / t.total as missed
+      FROM total t
+      CROSS JOIN missed m`;
+    try {
+      const result = await this.conn.run(sql, [chainId, days, chainId, days]);
+      const row = await result.getRowObjects(); // only one row
+      if (row.length === 0) return { ok: true, value: null };
+      return { ok: true, value: rowToSignStats(row[0]) };
+    } catch (error) {
+      this.log.error("Error getting chain signed percentage: %s", error);
+      return { ok: false, error: toError(error) };
+    }
+  }
+
+  public async getBlockByHeight(
+    chainId: string,
+    height: bigint,
+    chainType: "bft" | "tm2",
+  ): Promise<Result<Block | null, Error>> {
+    const sql = `
+      SELECT
+        chain_id,
+        height,
+        hash,
+        time,
+        signed,
+        signature
+      FROM blocks
+      WHERE
+        chain_id = ? AND height = ?`;
+    try {
+      const result = await this.conn.run(sql, [chainId, height]);
+      const row = await result.getRowObjects(); // only one row
+      if (row.length === 0) return { ok: true, value: null };
+      return { ok: true, value: rowToBlock(row[0], chainType) };
+    } catch (error) {
+      this.log.error("Error getting block by height: %s", error);
+      return { ok: false, error: toError(error) };
+    }
+  }
+
+  public async getBlockByRange(
+    chainId: string,
+    startHeight: bigint,
+    endHeight: bigint,
+    chainType: "bft" | "tm2",
+  ): Promise<Result<Block[], Error>> {
+    const sql = `
+      SELECT
+        chain_id,
+        height,
+        hash,
+        time,
+        signed,
+        signature
+      FROM blocks
+      WHERE
+        chain_id = ? AND height >= ? AND height <= ?`;
+    try {
+      const result = await this.conn.run(sql, [chainId, startHeight, endHeight]);
+      const rows = await result.getRowObjects();
+      return { ok: true, value: rows.map((row) => rowToBlock(row, chainType)) };
+    } catch (error) {
+      this.log.error("Error getting block by range: %s", error);
+      return { ok: false, error: toError(error) };
     }
   }
 }
