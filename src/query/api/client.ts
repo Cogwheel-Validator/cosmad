@@ -1,6 +1,6 @@
 import type { Response } from "../response";
-import { getStatus, getValidatorData } from "./query";
-import type { NodeData, ValidatorDataResponse } from "./types";
+import { getStatus, getValidatorData, getValset } from "./query";
+import type { NodeData, ValidatorDataResponse, ValSetDataResponse } from "./types";
 
 // Cosmos API client.
 export class ApiClient {
@@ -68,5 +68,14 @@ export class ApiClient {
     }
 
     return { healthyRpcs, unhealthyRpcs };
+  }
+
+  public async getValset(
+    url: string,
+    height: number,
+    timeout: number = 5000,
+    nextKey: string | undefined = undefined,
+  ): Promise<Response<ValSetDataResponse>> {
+    return getValset(url, height, timeout, nextKey);
   }
 }

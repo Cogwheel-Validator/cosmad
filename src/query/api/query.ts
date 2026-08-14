@@ -7,7 +7,11 @@ import {
   NodeInfo,
   NodeSyncInfo,
   ValidatorData,
+  ValSet,
+  ValSetError,
+  type ValSetDataResponse,
   type ValidatorDataResponse,
+  type ValSetErrorResponse,
 } from "./types";
 
 export async function getValidatorData(
@@ -60,4 +64,32 @@ export async function getStatus(api: string, timeout: number = 5000): Promise<Re
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+export async function getValset(
+  api: string,
+  height: number,
+  timeout: number = 5000,
+  nextKey: string = "",
+): Promise<Response<ValSetDataResponse>> {
+  const url = `${api}/cosmos/base/tendermint/v1beta1/validatorsets/${height}`;
+  const params = nextKey.length > 0 ? { "pagination.next_key": nextKey } : undefined;
+  const response = await axios.get(url, { timeout, params });
+  const data = camelcaseKeys(response.data, { deep: true });
+  const result = ValSet(data);
+  if (result instanceof ArkErrors) {
+    const newRes = ValSetError(result);
+    if (newRes instanceof ArkErrors) {
+      return {
+        ok: false,
+        error: newRes?.summary,
+        problemsByPath: newRes?.flatProblemsByPath,
+      };
+    }
+    return {
+      ok: false,
+      error: newRes.error
+    };
+  }
+  return { ok: true, data: result };
 }

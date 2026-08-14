@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AxiosResponse } from "axios";
 import axios from "axios";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi, assert } from "vitest";
 import { getCommit, getStatus } from "../query";
 
 vi.mock("axios");
@@ -54,7 +54,7 @@ describe("cosmos query", () => {
   test("getCommit returns parsed data", async () => {
     vi.mocked(axios.get).mockResolvedValue(axiosOk(commitRaw));
 
-    const res = await getCommit("https://rpc.example", 8259656);
+    const res = await getCommit("https://rpc.example", 5000, 8259656);
 
     expect(res.ok).toBe(true);
     expect(res.data).toBeDefined();
@@ -71,8 +71,11 @@ describe("cosmos query", () => {
     const res = await getStatus("https://rpc.example");
 
     expect(res.ok).toBe(false);
-    expect(res.error).toContain("ECONNABORTED");
-    expect(res.error).toContain("Timeout");
+    if (!res.ok) {
+      // have to be done for TS type check
+      expect(res.error).toContain("ECONNABORTED");
+      expect(res.error).toContain("Timeout");
+    }
   });
 
   test("getCommit timed out", async () => {
@@ -87,8 +90,11 @@ describe("cosmos query", () => {
     const res = await getCommit("https://rpc.example", 8259656);
 
     expect(res.ok).toBe(false);
-    expect(res.error).toContain("ECONNABORTED");
-    expect(res.error).toContain("Timeout");
+    if (!res.ok) {
+      // have to be done for TS type check
+      expect(res.error).toContain("ECONNABORTED");
+      expect(res.error).toContain("Timeout");
+    }
   });
 
   test("getStatus Axios error", async () => {
@@ -99,7 +105,10 @@ describe("cosmos query", () => {
     const res = await getStatus("https://rpc.example");
 
     expect(res.ok).toBe(false);
-    expect(res.error).toContain("ECONNREFUSED");
+    if (!res.ok) {
+      // have to be done for TS type check
+      expect(res.error).toContain("ECONNREFUSED");
+    }
   });
 
   test("getCommit Axios error", async () => {
@@ -114,7 +123,10 @@ describe("cosmos query", () => {
     const res = await getCommit("https://rpc.example", 8259656);
 
     expect(res.ok).toBe(false);
-    expect(res.error).toContain("ECONNREFUSED");
+    if (!res.ok) {
+      // have to be done for TS type check
+      expect(res.error).toContain("ECONNREFUSED");
+    }
   });
 
   test("getStatus ArkType error", async () => {
@@ -123,8 +135,11 @@ describe("cosmos query", () => {
     const res = await getStatus("https://rpc.example");
 
     expect(res.ok).toBe(false);
-    expect(res.error).toBeTruthy();
-    expect(res.problemsByPath).toBeDefined();
+    if (!res.ok) {
+      // have to be done for TS type check
+      expect(res.error).toBeTruthy();
+      expect(res.problemsByPath).toBeDefined();
+    }
   });
 
   test("getCommit ArkType error", async () => {
@@ -133,7 +148,10 @@ describe("cosmos query", () => {
     const res = await getCommit("https://rpc.example", 8259656);
 
     expect(res.ok).toBe(false);
-    expect(res.error).toBeTruthy();
-    expect(res.problemsByPath).toBeDefined();
+    if (!res.ok) {
+      // have to be done for TS type check
+      expect(res.error).toBeTruthy();
+      expect(res.problemsByPath).toBeDefined();
+    }
   });
 });
