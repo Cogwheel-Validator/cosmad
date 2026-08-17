@@ -1,6 +1,11 @@
 import type { Response } from "../response";
-import { getStatus, getValidatorData, getValset } from "./query";
-import type { NodeData, ValidatorDataResponse, ValSetDataResponse } from "./types";
+import { getSlashingParams, getStatus, getValidatorData, getValset } from "./query";
+import type {
+  NodeData,
+  SlashingParamsResponse,
+  ValidatorDataResponse,
+  ValSetDataResponse,
+} from "./types";
 
 // Cosmos API client.
 export class ApiClient {
@@ -33,8 +38,16 @@ export class ApiClient {
     url: string,
     valoperAddr: string,
     timeout?: number,
+    height?: number,
   ): Promise<Response<ValidatorDataResponse>> {
-    return getValidatorData(url, timeout, valoperAddr);
+    return getValidatorData(url, timeout, valoperAddr, height);
+  }
+
+  public async getSlashingParams(
+    url: string,
+    timeout?: number,
+  ): Promise<Response<SlashingParamsResponse>> {
+    return getSlashingParams(url, timeout);
   }
 
   public async getStatus(url: string): Promise<Response<NodeData>> {

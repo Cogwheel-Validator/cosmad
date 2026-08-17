@@ -34,6 +34,16 @@ export const AlertConfig = type({
   // Send alert if the validator is in the inactive set, jailed or tombstoned.
   alertIfInactive: "boolean",
 
+  // Number of trailing blocks to use as the sliding signing window for
+  // percentageMissedBlocksAlert evaluation.
+  // It is optional for bft chains since this is normally fetched
+  // from the chain itself (signed_blocks_window via /cosmos/slashing/v1beta1/params) rather
+  // than configured. You could override it for bft chains but I can't recommend this unless
+  // you know what you're doing.
+  // For tm2 chains (no such endpoint) it defaults to 10_000 if left unset. For tm2 it is recommended
+  // to set it to some value that makes sense for your chain's block time and slashing window.
+  "signingWindowSize?": "number.integer > 0",
+
   // Telegram alert config. If you want to overwrite the global settings, else leave it empty.
   "telegram?": TelegramConfig,
 

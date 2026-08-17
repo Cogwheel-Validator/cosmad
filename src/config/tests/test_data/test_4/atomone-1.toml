@@ -5,6 +5,9 @@ valcons_address = "atomonevalcon1xyz"
 rpc_urls = [
   { url = "https://rpc.atom.one", alert_if_down = true }
 ]
+api_urls = [
+  { url = "https://api.atom.one", alert_if_down = true }
+]
 
 alert_config = {
   alert_if_inactive = true,

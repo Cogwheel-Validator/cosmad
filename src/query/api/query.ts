@@ -6,24 +6,49 @@ import {
   type NodeData,
   NodeInfo,
   NodeSyncInfo,
+  SlashingParams,
+  type SlashingParamsResponse,
   ValidatorData,
-  ValSet,
-  ValSetError,
-  type ValSetDataResponse,
   type ValidatorDataResponse,
-  type ValSetErrorResponse,
+  ValSet,
+  type ValSetDataResponse,
+  ValSetError,
 } from "./types";
 
 export async function getValidatorData(
   api: string,
   timeout: number = 5000,
   valoperAddr: string,
+  height?: number,
 ): Promise<Response<ValidatorDataResponse>> {
   const url = `${api}/cosmos/staking/v1beta1/validators/${valoperAddr}`;
   try {
-    const response = await axios.get(url, { timeout });
+    // Cosmos SDK's grpc-gateway honors this header to query state as of a past height, even on
+    // endpoints (like this one) that don't accept a height query/path param directly.
+    const response = await axios.get(url, {
+      timeout,
+      ...(height != null ? { headers: { "x-cosmos-block-height": String(height) } } : {}),
+    });
     const data = camelcaseKeys(response.data, { deep: true });
     const result = ValidatorData(data);
+    if (result instanceof ArkErrors) {
+      return { ok: false, error: result.summary, problemsByPath: result.flatProblemsByPath };
+    }
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function getSlashingParams(
+  api: string,
+  timeout: number = 5000,
+): Promise<Response<SlashingParamsResponse>> {
+  const url = `${api}/cosmos/slashing/v1beta1/params`;
+  try {
+    const response = await axios.get(url, { timeout });
+    const data = camelcaseKeys(response.data, { deep: true });
+    const result = SlashingParams(data);
     if (result instanceof ArkErrors) {
       return { ok: false, error: result.summary, problemsByPath: result.flatProblemsByPath };
     }
@@ -74,22 +99,26 @@ export async function getValset(
 ): Promise<Response<ValSetDataResponse>> {
   const url = `${api}/cosmos/base/tendermint/v1beta1/validatorsets/${height}`;
   const params = nextKey.length > 0 ? { "pagination.next_key": nextKey } : undefined;
-  const response = await axios.get(url, { timeout, params });
-  const data = camelcaseKeys(response.data, { deep: true });
-  const result = ValSet(data);
-  if (result instanceof ArkErrors) {
-    const newRes = ValSetError(result);
-    if (newRes instanceof ArkErrors) {
+  try {
+    const response = await axios.get(url, { timeout, params });
+    const data = camelcaseKeys(response.data, { deep: true });
+    const result = ValSet(data);
+    if (result instanceof ArkErrors) {
+      const asError = ValSetError(data);
+      if (asError instanceof ArkErrors) {
+        return {
+          ok: false,
+          error: `Response matched neither ValSet nor a known error shape: ${result.summary}`,
+          problemsByPath: result.flatProblemsByPath,
+        };
+      }
       return {
         ok: false,
-        error: newRes?.summary,
-        problemsByPath: newRes?.flatProblemsByPath,
+        error: asError.message,
       };
     }
-    return {
-      ok: false,
-      error: newRes.error
-    };
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-  return { ok: true, data: result };
 }

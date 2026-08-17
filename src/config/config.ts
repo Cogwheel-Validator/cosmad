@@ -131,6 +131,19 @@ function validateChainConfig(chainId: string, config: ChainConfigType): null | G
     return new GeneralLoaderError(error);
   }
 
+  if (config.chainType === "bft" && (!config.apiUrls || config.apiUrls.length === 0)) {
+    const error = `Chain config is missing apiUrls (required for bft chains): ${chainId}`;
+    log.error(error);
+    return new GeneralLoaderError(error);
+  }
+
+  if (config.alertConfig.signingWindowSize != null) {
+    log.warn(
+      `Chain ${chainId} sets alertConfig.signingWindowSize explicitly this overrides the ` +
+        "chain's own signed_blocks_window (bft) and isn't recommended unless you have a specific reason to diverge from it.",
+    );
+  }
+
   return null;
 }
 

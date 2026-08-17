@@ -3,9 +3,12 @@ import { type } from "arktype";
 export const ValidatorData = type({
   validator: type({
     operatorAddress: "string",
+    // grpc-gateway JSON-encodes Any as {"@type": "...", key: "..."} (Amino-style), not the
+    // protobufjs {typeUrl, value} shape — and "@type" isn't snake_case so camelcaseKeys leaves
+    // it untouched.
     consensusPubkey: type({
-      typeUrl: "string",
-      value: "string",
+      "@type": "string",
+      key: "string",
     }),
     jailed: "boolean",
     status: "string",
@@ -57,35 +60,47 @@ export type NodeData = {
 
 export type ValidatorDataResponse = typeof ValidatorData.infer;
 
+export const SlashingParams = type({
+  params: type({
+    signedBlocksWindow: "string.integer.parse",
+    minSignedPerWindow: "string",
+    downtimeJailDuration: "string",
+    slashFractionDoubleSign: "string",
+    slashFractionDowntime: "string",
+  }),
+});
+
+export type SlashingParamsResponse = typeof SlashingParams.infer;
+
+const ValSetValidator = type({
+  address: "string",
+  pubKey: type({
+    "@type": "string",
+    key: "string",
+  }),
+  votingPower: "string",
+  proposerPriority: "string",
+});
+
 export const ValSet = type({
   blockHeight: "string",
-  validators: [
-    {
-      address: "string",
-      pubKey: {
-        typeUrl: "string",
-        value: "string",
-      },
-      votingPower: "string",
-      proposerPriority: "string"
-    }
-  ],
+  validators: ValSetValidator.array(),
   pagination: {
-    nextKey: "string",
+    nextKey: "string | null",
     total: "string",
-  }
+  },
 });
 
 export type ValSetDataResponse = typeof ValSet.infer;
 
+// grpc-gateway error responses vary by version/endpoint — commonly {code, message, details},
+// with the legacy top-level "error" string field frequently absent. Keep this permissive so a
+// real error response doesn't itself fail to parse.
 export const ValSetError = type({
-  error: "string",
   code: "number",
   message: "string",
-  details: type({
-    typeUrl: "string",
-    value: "string",
-  }).array(),
+  "error?": "string",
+  "details?": "unknown[]",
 });
 
 export type ValSetErrorResponse = typeof ValSetError.infer;

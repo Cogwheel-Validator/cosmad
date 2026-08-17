@@ -12,6 +12,7 @@ webhook_url = "https://discord.com/api/webhooks/999999999999999999/abc123"
 [telegram]
 enabled = true
 bot_token = "5555555:AAAAAAAA"
+chat_id = "-100123456789"
 
 [health_check]
 enabled = true
@@ -25,6 +26,9 @@ valoper_address = "cosmosvaloper1xyz"
 valcons_address = "cosmosvalcon1xyz"
 rpc_urls = [
   { url = "https://rpc.cosmos.network", alert_if_down = true }
+]
+api_urls = [
+  { url = "https://api.cosmos.network", alert_if_down = true }
 ]
 
 alert_config = {

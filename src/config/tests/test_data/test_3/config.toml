@@ -23,6 +23,7 @@ rpc_urls = [
 
 alert_config = {
   alert_if_inactive = true,
+  signing_window_size = 50,
   stalled_alert = { enabled = true, stalled_threshold = 60 },
   consecutive_miss_alert = { enabled = true, threshold = 50, repeat = false, repeat_interval = 300 },
   percentage_missed_blocks_alert = { enabled = false, threshold = 10.0, repeat = false }

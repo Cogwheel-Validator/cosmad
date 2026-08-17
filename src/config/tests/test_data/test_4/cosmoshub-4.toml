@@ -5,6 +5,9 @@ valcons_address = "cosmosvalcon1xyz"
 rpc_urls = [
   { url = "https://rpc.cosmos.network", alert_if_down = true }
 ]
+api_urls = [
+  { url = "https://api.cosmos.network", alert_if_down = true }
+]
 
 alert_config = {
   alert_if_inactive = true,

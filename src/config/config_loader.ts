@@ -1,3 +1,4 @@
+import logger from "../pkgs/logger";
 import type { ChainConfigType } from "./chain_types";
 import { loadChainConfigs, loadGlobalConfig } from "./config";
 import type { GlobalConfigType } from "./global_config";
@@ -7,7 +8,6 @@ import type {
   PagerdutyConfigType,
   TelegramConfigType,
 } from "./notification_types";
-import logger from "../pkgs/logger";
 
 export interface ConfigLoaderData {
   apiEnabled: boolean;

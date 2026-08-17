@@ -1,5 +1,9 @@
 import { ApiClient } from "./api/client";
-import type { ValidatorDataResponse, ValSetDataResponse } from "./api/types";
+import type {
+  SlashingParamsResponse,
+  ValidatorDataResponse,
+  ValSetDataResponse,
+} from "./api/types";
 import type { Response } from "./response";
 import { RpcClient } from "./rpc/client";
 import type { BlockCommitResponse } from "./rpc/types";
@@ -20,6 +24,7 @@ export class QueryOperator {
   private lastRpcHealthCheckTime: number = 0;
   private lastApiHealthCheckTime: number = 0;
   private retryAttempts: number;
+  private rangeChunkSize: number;
 
   // Coalesce concurrent health check calls into one in-flight promise.
   private rpcHealthCheckInFlight: Promise<void> | null = null;
@@ -32,6 +37,7 @@ export class QueryOperator {
     apiUrls?: string[],
     healthCheckInterval: number = 60,
     retryAttempts: number = 5,
+    rangeChunkSize: number = QueryOperator.DEFAULT_RANGE_CHUNK_SIZE,
   ) {
     this.chainId = chainId;
     this.chainType = chainType;
@@ -41,6 +47,7 @@ export class QueryOperator {
     }
     this.healthCheckInterval = healthCheckInterval;
     this.retryAttempts = retryAttempts;
+    this.rangeChunkSize = rangeChunkSize;
   }
 
   // Returns the list of healthy RPC URLs.
@@ -109,33 +116,47 @@ export class QueryOperator {
   }
 
   // Retries fn up to retryAttempts times with exponential backoff (100ms, 200ms, 400ms...).
+  // fn (or getHealthyRpc/getHealthyApi called inside it) can throw rather than resolve to
+  // {ok:false} — e.g. "No healthy RPC endpoints available" — so those throws are caught here
+  // and treated as a failed attempt too. Without this, a fully-unhealthy RPC set would reject
+  // the returned promise instead of resolving to Response<T>, breaking every caller's `.ok`
+  // check and escaping as an unhandled rejection (previously this crashed the whole ingestion
+  // process — and every other chain's worker with it — the moment one chain's RPCs went down).
   private async withRetry<T>(fn: () => Promise<Response<T>>): Promise<Response<T>> {
     let lastResult: Response<T> = { ok: false, error: "No attempts made" };
     for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
       if (attempt > 0) {
         await new Promise<void>((resolve) => setTimeout(resolve, 100 * 2 ** (attempt - 1)));
       }
-      lastResult = await fn();
+      try {
+        lastResult = await fn();
+      } catch (err) {
+        lastResult = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
       if (lastResult.ok) return lastResult;
     }
     return lastResult;
   }
 
-  // Max number of commit requests in flight at once for a single getRangeCommits call, so a
-  // large gap (e.g. after downtime) doesn't fire hundreds of concurrent requests at the RPCs.
-  private static readonly RANGE_CHUNK_SIZE = 25;
+  // Default max number of commit requests in flight at once for a single getRangeCommits call,
+  // so a large gap (e.g. after downtime) doesn't fire hundreds of concurrent requests at the
+  // RPCs. Overridable per chain via ChainConfig.rangeChunkSize.
+  private static readonly DEFAULT_RANGE_CHUNK_SIZE = 25;
 
   /**
    * Returns commits for a given range of block heights [from, to).
-   * Requests are batched in chunks of RANGE_CHUNK_SIZE run concurrently; each individual
-   * commit retries independently. Results are returned in height order.
+   * Requests are batched sequentially in chunks of `rangeChunkSize`, each chunk run
+   * concurrently — so only one chunk's worth of requests is ever in flight.
+   * @param from - The starting block height (inclusive).
+   * @param to - The ending block height (exclusive).
+   * @returns A promise that resolves to an array of commit responses.
    */
   public async getRangeCommits(from: number, to: number): Promise<Response<BlockCommitResponse>[]> {
     const heights = Array.from({ length: to - from }, (_, i) => from + i);
     const results: Response<BlockCommitResponse>[] = [];
-    for (let i = 0; i < heights.length; i += QueryOperator.RANGE_CHUNK_SIZE) {
-      const chunk = heights.slice(i, i + QueryOperator.RANGE_CHUNK_SIZE);
-      const chunkResults = await Promise.all(
+    for (let i = 0; i < heights.length; i += this.rangeChunkSize) {
+      const chunk = heights.slice(i, i + this.rangeChunkSize);
+      const settled = await Promise.allSettled(
         chunk.map((height) =>
           this.withRetry(async () => {
             const rpc = await this.getHealthyRpc();
@@ -143,7 +164,16 @@ export class QueryOperator {
           }),
         ),
       );
-      results.push(...chunkResults);
+      results.push(
+        ...settled.map((s) =>
+          s.status === "fulfilled"
+            ? s.value
+            : {
+                ok: false as const,
+                error: s.reason instanceof Error ? s.reason.message : String(s.reason),
+              },
+        ),
+      );
     }
     return results;
   }
@@ -156,17 +186,45 @@ export class QueryOperator {
     });
   }
 
-  public async getValidatorData(valoperAddr: string): Promise<Response<ValidatorDataResponse>> {
+  /**
+   * Retrieves validator data for a given validator address, optionally at a specific height.
+   * @param valoperAddr - The validator address to retrieve data for.
+   * @param height optional — sent via the x-cosmos-block-height header to query state as of a
+   *  past height, e.g. to check active-set status at the height of a specific missed block
+   *  rather than the chain's current tip. */
+  public async getValidatorData(
+    valoperAddr: string,
+    height?: number,
+  ): Promise<Response<ValidatorDataResponse>> {
     if (this.chainType === "tm2")
       return { ok: false, error: `Unsupported method for tm2 on ${this.chainId}` };
     if (this.apiClient === undefined) return { ok: false, error: "No API client available" };
     const client = this.apiClient;
     return this.withRetry(async () => {
       const apiUrl = await this.getHealthyApi();
-      return client.getValidatorData(apiUrl, valoperAddr);
+      return client.getValidatorData(apiUrl, valoperAddr, undefined, height);
     });
   }
 
+  // Returns the slashing parameters for the chain.
+  // @returns A promise that resolves to the slashing parameters response.
+  public async getSlashingParams(): Promise<Response<SlashingParamsResponse>> {
+    if (this.chainType === "tm2")
+      return { ok: false, error: `Unsupported method for tm2 on ${this.chainId}` };
+    if (this.apiClient === undefined) return { ok: false, error: "No API client available" };
+    const client = this.apiClient;
+    return this.withRetry(async () => {
+      const apiUrl = await this.getHealthyApi();
+      return client.getSlashingParams(apiUrl);
+    });
+  }
+
+  /**
+   * Retrieves the validator set for a given height.
+   * @param height - Block height which will be used in the query.
+   * @param timeout - Timeout in milliseconds for the request. Defaults to 5000ms.
+   * @returns A promise that resolves to the validator set response.
+   */
   public async getValset(
     height: number,
     timeout: number = 5000,
@@ -174,7 +232,7 @@ export class QueryOperator {
     if (this.apiClient === undefined) return { ok: false, error: "No API client available" };
     const client = this.apiClient;
     let nextKey: string = "";
-    let validatorSet: ValSetDataResponse | undefined = undefined;
+    let validatorSet: ValSetDataResponse | undefined;
     do {
       const key = nextKey;
       const response = await this.withRetry(async () => {
@@ -188,7 +246,7 @@ export class QueryOperator {
         validatorSet.validators.push(...response.data.validators);
       }
 
-      nextKey = validatorSet.pagination.nextKey;
+      nextKey = validatorSet.pagination.nextKey ?? "";
     } while (nextKey !== "");
     return { ok: true, data: validatorSet! };
   }
