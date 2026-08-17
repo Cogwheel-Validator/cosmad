@@ -13,6 +13,7 @@ export const DiscordConfig = type({
 export const TelegramConfig = type({
   enabled: "boolean",
   botToken: "string",
+  chatId: "string",
 });
 
 export const HealthCheckConfig = type({
