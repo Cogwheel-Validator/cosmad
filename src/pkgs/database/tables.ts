@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Column, Table } from "./sql/decorators";
 import { AllowedTypes } from "./sql/types";
 
@@ -152,10 +152,9 @@ export class Alert {
   }
 
   /**
-   * Generate a deterministic SHA-256 dedup key from the alert's identifying fields.
-   * This key is stable across restarts and can be used as a PagerDuty dedup_key.
+   * Generates a fresh, unique ID for a new alert incident using UUIDv4
    */
-  public static generateKey(chainId: string, alertType: string): string {
-    return createHash("sha256").update(`${chainId}:${alertType}`).digest("hex");
+  public static generateId(): string {
+    return randomUUID();
   }
 }

@@ -3,7 +3,6 @@ import type { ConfigLoaderData } from "@/config/config_loader";
 import logger from "@/pkgs/logger";
 import type { AlertEvent } from "../types";
 import { DiscordNotifier } from "./discord";
-import { HealthCheckNotifier } from "./healthcheck";
 import { PagerdutyNotifier } from "./pagerduty";
 import { TelegramNotifier } from "./telegram";
 import type { AlertNotification, Notifier } from "./types";
@@ -42,9 +41,6 @@ async function sendWithRetry(
 
 export class NotificationDispatcher {
   private notifiers: Notifier[];
-  private healthCheckNotifier: HealthCheckNotifier | undefined;
-  private healthCheckInterval: number = 60000;
-  private isRunning: boolean = false; // shutdown
 
   constructor(chainAlertConfig: AlertConfigType, globalAlerts: GlobalAlertsConfig) {
     this.notifiers = [];
@@ -57,27 +53,6 @@ export class NotificationDispatcher {
 
     const pagerdutyCfg = chainAlertConfig.pagerduty ?? globalAlerts.pagerduty;
     if (pagerdutyCfg?.enabled) this.notifiers.push(new PagerdutyNotifier(pagerdutyCfg));
-
-    const healthCheckCfg = globalAlerts.healthCheck;
-    if (healthCheckCfg?.enabled) {
-      this.healthCheckNotifier = new HealthCheckNotifier(healthCheckCfg);
-      this.healthCheckInterval = healthCheckCfg.ping * 1000;
-      this.isRunning = true;
-    }
-
-    // initiate the healthcheck ping
-    if (this.healthCheckNotifier) this.healthCheckNotifier.sendStartPing(10000);
-  }
-
-  async pingHealthcheck(): Promise<void> {
-    while (this.isRunning && this.healthCheckNotifier) {
-      try {
-        this.healthCheckNotifier.sendSuccessPing(10000);
-      } catch (e) {
-        log.error("Failed to send healthcheck ping: %s", e);
-      }
-      await new Promise((resolve) => setTimeout(resolve, this.healthCheckInterval));
-    }
   }
 
   async dispatch(event: AlertEvent, chainId: string): Promise<void> {
@@ -86,10 +61,6 @@ export class NotificationDispatcher {
     await Promise.all(
       this.notifiers.map((notifier) => sendWithRetry(notifier, notification, chainId)),
     );
-  }
-
-  public close(): void {
-    this.isRunning = false;
   }
 }
 
