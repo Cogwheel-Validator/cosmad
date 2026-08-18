@@ -1,8 +1,8 @@
 import { createConnection, type Socket } from "node:net";
+import { BlockWindowStats, type ChainSignatureStats } from "../pkgs/database/analytics";
 import type { IWriteDb } from "../pkgs/database/interfaces";
 import type { Alert, Block } from "../pkgs/database/tables";
 import type { Result } from "../pkgs/models/result";
-import type { ChainSignatureStats } from "../pkgs/database/analytics";
 import {
   alertToWire,
   blockToWire,
@@ -202,6 +202,22 @@ export class EngineClient implements IWriteDb {
     });
     return toResult<"getBlockByRange", Block[]>(response, (value) =>
       value.map((v) => wireToBlock(v, this.chainType)),
+    );
+  }
+
+  public async getBlockStats(
+    startHeight: bigint,
+    endHeight: bigint,
+  ): Promise<Result<BlockWindowStats, Error>> {
+    const response = await this.connection.request({
+      type: "getBlockStats",
+      chainId: this.chainId,
+      startHeight: startHeight.toString(),
+      endHeight: endHeight.toString(),
+    });
+    return toResult<"getBlockStats", BlockWindowStats>(
+      response,
+      (value) => new BlockWindowStats(value.total, value.missed),
     );
   }
 

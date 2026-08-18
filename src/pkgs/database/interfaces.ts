@@ -1,5 +1,5 @@
 import type { Result } from "../models/result";
-import type { ChainSignatureStats } from "./analytics";
+import type { BlockWindowStats, ChainSignatureStats } from "./analytics";
 import type { Alert, Block } from "./tables";
 
 // Interface for methods that provide read only access to the database.
@@ -9,6 +9,7 @@ export interface IReadDb {
   latestBlockHeight(): Promise<Result<bigint | null, Error>>;
   getBlockByHeight(height: bigint): Promise<Result<Block | null, Error>>;
   getBlockByRange(startHeight: bigint, endHeight: bigint): Promise<Result<Block[], Error>>;
+  getBlockStats(startHeight: bigint, endHeight: bigint): Promise<Result<BlockWindowStats, Error>>;
   getChainSignedPercentage(days: number): Promise<Result<ChainSignatureStats | null, Error>>;
   getAlert(alertKey: string): Promise<Result<Alert | null, Error>>;
   getUnclosedAlerts(): Promise<Result<Alert[], Error>>;

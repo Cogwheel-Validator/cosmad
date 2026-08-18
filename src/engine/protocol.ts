@@ -137,6 +137,12 @@ export interface EngineOps {
     params: { chainId: string; startHeight: string; endHeight: string; chainType: chainType };
     result: WireBlock[];
   };
+  // Aggregate counts, not individual blocks - see RWDB.getBlockStats. total/missed are plain
+  // numbers already, so no Wire<->domain conversion is needed beyond the object shape itself.
+  getBlockStats: {
+    params: { chainId: string; startHeight: string; endHeight: string };
+    result: { total: number; missed: number };
+  };
   getChainSignedPercentage: {
     params: { chainId: string; days: number };
     result: WireChainSignatureStats | null;

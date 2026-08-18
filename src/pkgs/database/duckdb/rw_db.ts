@@ -13,12 +13,19 @@ import {
 import type { Logger } from "pino";
 import logger from "../../logger";
 import type { Result } from "../../models/result";
-import type { ChainSignatureStats } from "../analytics";
+import type { BlockWindowStats, ChainSignatureStats } from "../analytics";
 import type { IWriteDb } from "../interfaces";
 import { generateCreateTableStatements } from "../sql/generate";
 import type { Constructor } from "../sql/types";
 import { Alert, Block } from "../tables";
-import { alertToRow, blockToRow, rowToAlert, rowToBlock, rowToSignStats } from "./mappers";
+import {
+  alertToRow,
+  blockToRow,
+  rowToAlert,
+  rowToBlock,
+  rowToBlockWindowStats,
+  rowToSignStats,
+} from "./mappers";
 import { ChainScopedDb } from "./scoped";
 
 function toError(error: unknown): Error {
@@ -35,6 +42,8 @@ export interface DuckDbOptions {
 export class RWDB {
   conn: DuckDBConnection;
   log: Logger;
+
+  private static readonly APPENDER_CHUNK_ROWS = 2048;
 
   // Private constructor, use create() instead.
   private constructor(conn: DuckDBConnection) {
@@ -70,6 +79,7 @@ export class RWDB {
     return rwdb;
   }
 
+  // initSchema initialises the database schema
   private async initSchema(): Promise<void> {
     const tables: Constructor[] = [Block, Alert] as unknown as Constructor[];
     for (const table of tables) {
@@ -90,6 +100,12 @@ export class RWDB {
     return new ChainScopedDb(this, chainId, chainType);
   }
 
+  /**
+   * appendBlocks appends an array of blocks to the database
+   * @param chainId unique chain identification
+   * @param blocks array of blocks to append
+   * @returns promise wrapped result of the append
+   */
   public async appendBlocks(chainId: string, blocks: Block[]): Promise<Result<undefined, Error>> {
     this.log.debug("Appending %d blocks for %s to the database", blocks.length, chainId);
     this.log.info(
@@ -100,18 +116,23 @@ export class RWDB {
     const duckdbData = blocks.map((block) => blockToRow(block));
     try {
       const appender = await this.conn.createAppender("blocks");
-      const chunk = DuckDBDataChunk.create([VARCHAR, UBIGINT, BLOB, TIMESTAMP, TINYINT, BLOB]);
-      chunk.setRows(
-        duckdbData.map((data) => [
-          data.chainId,
-          data.height,
-          data.hash,
-          data.time,
-          data.signed,
-          data.signature ?? null,
-        ]),
-      );
-      appender.appendDataChunk(chunk);
+      // A DuckDBDataChunk is capped at DuckDB's internal STANDARD_VECTOR_SIZE (2048 rows)
+      // Split larger batches across multiple chunks on the same appender.
+      for (let i = 0; i < duckdbData.length; i += RWDB.APPENDER_CHUNK_ROWS) {
+        const slice = duckdbData.slice(i, i + RWDB.APPENDER_CHUNK_ROWS);
+        const chunk = DuckDBDataChunk.create([VARCHAR, UBIGINT, BLOB, TIMESTAMP, TINYINT, BLOB]);
+        chunk.setRows(
+          slice.map((data) => [
+            data.chainId,
+            data.height,
+            data.hash,
+            data.time,
+            data.signed,
+            data.signature ?? null,
+          ]),
+        );
+        appender.appendDataChunk(chunk);
+      }
       appender.closeSync();
       this.log.info("Blocks appended successfully");
       return { ok: true, value: undefined };
@@ -121,6 +142,12 @@ export class RWDB {
     }
   }
 
+  /**
+   * insertBlocks inserts an array of blocks into the database
+   * @param chainId unique chain identification
+   * @param blocks array of blocks to insert
+   * @returns promise wrapped result of the insert
+   */
   public async insertBlocks(chainId: string, blocks: Block[]): Promise<Result<void, Error>> {
     this.log.debug("Inserting %d blocks for %s into the database", blocks.length, chainId);
     this.log.info(
@@ -150,6 +177,12 @@ export class RWDB {
     }
   }
 
+  /**
+   * latestBlock returns the latest block for the given chain
+   * @param chainId unique chain identification
+   * @param chainType the type of chain to get blocks for
+   * @returns promise wrapped result of the latest block
+   */
   public async latestBlock(
     chainId: string,
     chainType: "bft" | "tm2",
@@ -176,6 +209,11 @@ export class RWDB {
     }
   }
 
+  /**
+   * latestBlockHeight returns the latest block height for the given chain
+   * @param chainId unique chain identification
+   * @returns promise wrapped result of the latest block height
+   */
   public async latestBlockHeight(chainId: string): Promise<Result<bigint | null, Error>> {
     const sql = `SELECT height FROM blocks WHERE chain_id = ? ORDER BY height DESC LIMIT 1`;
     try {
@@ -191,6 +229,11 @@ export class RWDB {
     }
   }
 
+  /**
+   * insertAlert inserts an alert into the database
+   * @param alert data containing all alert information
+   * @returns promise wrapped result of the insert
+   */
   public async insertAlert(alert: Alert): Promise<Result<void, Error>> {
     this.log.debug("Inserting alert %s into the database", alert.alertId);
     const row = alertToRow(alert);
@@ -282,6 +325,13 @@ export class RWDB {
     }
   }
 
+  /**
+   * touchAlertNotified updates the last notified at date and repeat count for the alert
+   * @param alertId unique alert id
+   * @param notifiedAt notified at date
+   * @param repeatCount repeat count
+   * @returns a promise wrapped result of the update
+   */
   public async touchAlertNotified(
     alertId: string,
     notifiedAt: Date,
@@ -299,6 +349,12 @@ export class RWDB {
     }
   }
 
+  /**
+   * getChainSignedPercentage returns a promise wrapped result of the chain's signed percentage
+   * @param chainId a unique id for the chain
+   * @param days an integer number of days to look back
+   * @returns a promise wrapped result of the chain's signed percentage
+   */
   public async getChainSignedPercentage(
     chainId: string,
     days: number,
@@ -335,6 +391,13 @@ export class RWDB {
     }
   }
 
+  /**
+   * getBlockByHeight returns a promise wrapped result of the block at the given height
+   * @param chainId id specific to that chain
+   * @param height a height to get the block for
+   * @param chainType the type of chain to get blocks for
+   * @returns a promise wrapped result of the block at the given height
+   */
   public async getBlockByHeight(
     chainId: string,
     height: bigint,
@@ -362,6 +425,14 @@ export class RWDB {
     }
   }
 
+  /**
+   * getBlockByRange returns a promise wrapped result of the blocks in the range
+   * @param chainId a id that is unique to that chain
+   * @param startHeight a height to start the range from
+   * @param endHeight a height to end the range at
+   * @param chainType the type of chain to get blocks for
+   * @returns a promise wrapped result of the blocks in the range
+   */
   public async getBlockByRange(
     chainId: string,
     startHeight: bigint,
@@ -385,6 +456,36 @@ export class RWDB {
       return { ok: true, value: rows.map((row) => rowToBlock(row, chainType)) };
     } catch (error) {
       this.log.error("Error getting block by range: %s", error);
+      return { ok: false, error: toError(error) };
+    }
+  }
+
+  /**
+   * Aggregate total/missed counts over a height range.
+   * Used for percentageMissedBlocksAlert so a wide signing window never needs every row pulled
+   * across the wire, just two counts.
+   * @param chainId the chain ID to query
+   * @param startHeight the start height of the range
+   * @param endHeight the end height of the range
+   * @returns a result containing the aggregated stats or an error
+   */
+  public async getBlockStats(
+    chainId: string,
+    startHeight: bigint,
+    endHeight: bigint,
+  ): Promise<Result<BlockWindowStats, Error>> {
+    const sql = `
+      SELECT
+        count(*) FILTER (WHERE signed != -1) as total,
+        count(*) FILTER (WHERE signed = 0) as missed
+      FROM blocks
+      WHERE chain_id = ? AND height >= ? AND height <= ?`;
+    try {
+      const result = await this.conn.run(sql, [chainId, startHeight, endHeight]);
+      const rows = await result.getRowObjects();
+      return { ok: true, value: rowToBlockWindowStats(rows[0] ?? { total: 0, missed: 0 }) };
+    } catch (error) {
+      this.log.error("Error getting block stats: %s", error);
       return { ok: false, error: toError(error) };
     }
   }

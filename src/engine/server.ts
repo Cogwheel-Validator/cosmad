@@ -1,8 +1,8 @@
 import { existsSync, unlinkSync } from "node:fs";
 import { createServer } from "node:net";
 import type { RWDB } from "../pkgs/database/duckdb/rw_db";
-import type { Result } from "../pkgs/models/result";
 import logger from "../pkgs/logger";
+import type { Result } from "../pkgs/models/result";
 import {
   alertToWire,
   blockToWire,
@@ -78,6 +78,10 @@ const handlers: Handlers = {
       chainType,
     );
     return r.ok ? { ok: true, value: r.value.map((b) => blockToWire(b, chainType)) } : r;
+  },
+  getBlockStats: async (p, { db }) => {
+    const r = await db.getBlockStats(p.chainId, BigInt(p.startHeight), BigInt(p.endHeight));
+    return r.ok ? { ok: true, value: { total: r.value.total, missed: r.value.missed } } : r;
   },
   getChainSignedPercentage: async (p, { db }) => {
     const r = await db.getChainSignedPercentage(p.chainId, p.days);

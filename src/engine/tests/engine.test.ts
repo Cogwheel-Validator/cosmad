@@ -26,6 +26,7 @@ beforeAll(async () => {
       [chainId, "bft"],
       ["chain-a", "bft"],
       ["chain-b", "bft"],
+      ["chain-c", "bft"],
     ]),
     socketPath,
   );
@@ -120,7 +121,7 @@ describe("engine over Unix socket", () => {
 
   test("full alert lifecycle over the socket: insert, get, touch, close", async () => {
     const db = writer.forChain(chainId, "bft");
-    const alertId = Alert.generateKey(chainId, "stalled");
+    const alertId = Alert.generateId();
     const openedAt = new Date("2026-02-01T00:00:00.000Z");
 
     const insertResult = await db.insertAlert(
@@ -156,17 +157,19 @@ describe("engine over Unix socket", () => {
     const db = writer.forChain("chain-a", "bft");
     const signature = "dGVzdAo=";
     const hash = "1112131415161718191a1b1c1d1e1f20";
-    const blocks = Array.from({ length: 100 }, (_, i) => (
-      new Block({
-        chainId: "chain-a",
-        height: BigInt(i),
-        time: new Date(),
-        signed: 1,
-        signature: signature,
-        chainType: "bft",
-        hash: hash,
-      })
-    ));
+    const blocks = Array.from(
+      { length: 100 },
+      (_, i) =>
+        new Block({
+          chainId: "chain-a",
+          height: BigInt(i),
+          time: new Date(),
+          signed: 1,
+          signature: signature,
+          chainType: "bft",
+          hash: hash,
+        }),
+    );
     const result = await db.insertBlocks(blocks);
     assert(result.ok);
 
@@ -185,18 +188,47 @@ describe("engine over Unix socket", () => {
     const db = writer.forChain("chain-b", "bft");
     const signature = "dGVzdAo=";
     const hash = "1112131415161718191a1b1c1d1e1f20";
-    const blocks = Array.from({ length: 100 }, (_, i) => (
-      new Block({
-        chainId: "chain-b",
-        height: BigInt(i),
-        time: new Date(),
-        signed: 1,
-        signature: signature,
-        chainType: "bft",
-        hash: hash,
-      })
-    ));
+    const blocks = Array.from(
+      { length: 100 },
+      (_, i) =>
+        new Block({
+          chainId: "chain-b",
+          height: BigInt(i),
+          time: new Date(),
+          signed: 1,
+          signature: signature,
+          chainType: "bft",
+          hash: hash,
+        }),
+    );
     const result = await db.insertBlocks(blocks);
     assert(result.ok);
+  });
+
+  test("getBlockStats aggregates over the wire, excluding signed=-1 blocks entirely", async () => {
+    const db = writer.forChain("chain-c", "bft");
+    const hash = "1112131415161718191a1b1c1d1e1f20";
+    // signed: 1,1,0,0,0,-1,-1 — total should exclude the two -1s (5), missed should count
+    // only the three 0s.
+    const signedValues = [1, 1, 0, 0, 0, -1, -1];
+    const blocks = signedValues.map(
+      (signed, i) =>
+        new Block({
+          chainId: "chain-c",
+          height: BigInt(i),
+          time: new Date(),
+          signed,
+          signature: undefined,
+          chainType: "bft",
+          hash,
+        }),
+    );
+    const result = await db.insertBlocks(blocks);
+    assert(result.ok);
+
+    const stats = await db.getBlockStats(0n, 6n);
+    assert(stats.ok);
+    expect(stats.value.total).toBe(5);
+    expect(stats.value.missed).toBe(3);
   });
 });

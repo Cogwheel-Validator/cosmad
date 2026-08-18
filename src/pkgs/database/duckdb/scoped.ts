@@ -1,5 +1,5 @@
 import type { Result } from "../../models/result";
-import type { ChainSignatureStats } from "../analytics";
+import type { BlockWindowStats, ChainSignatureStats } from "../analytics";
 import type { IWriteDb } from "../interfaces";
 import type { Alert, Block } from "../tables";
 import type { RWDB } from "./rw_db";
@@ -58,6 +58,13 @@ export class ChainScopedDb implements IWriteDb {
 
   public getBlockByHeight(height: bigint): Promise<Result<Block | null, Error>> {
     return this.db.getBlockByHeight(this.chainId, height, this.chainType);
+  }
+
+  public getBlockStats(
+    startHeight: bigint,
+    endHeight: bigint,
+  ): Promise<Result<BlockWindowStats, Error>> {
+    return this.db.getBlockStats(this.chainId, startHeight, endHeight);
   }
 
   public getChainSignedPercentage(

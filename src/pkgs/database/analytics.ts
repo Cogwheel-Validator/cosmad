@@ -9,3 +9,13 @@ export class ChainSignatureStats {
     this.percentageMissed = percentageMissed;
   }
 }
+
+export class BlockWindowStats {
+  public total: number;
+  public missed: number;
+
+  constructor(total: number, missed: number) {
+    this.total = total;
+    this.missed = missed;
+  }
+}

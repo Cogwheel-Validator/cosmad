@@ -4,7 +4,7 @@ import {
   DuckDBTimestampValue,
   type DuckDBValue,
 } from "@duckdb/node-api";
-import { ChainSignatureStats } from "../analytics";
+import { BlockWindowStats, ChainSignatureStats } from "../analytics";
 import { Alert, Block } from "../tables";
 
 export interface BlockRow {
@@ -94,4 +94,8 @@ export function rowToSignStats(data: Record<string, DuckDBValue>): ChainSignatur
     data.signed_blocks as number,
     data.missed_blocks as number,
   );
+}
+
+export function rowToBlockWindowStats(data: Record<string, DuckDBValue>): BlockWindowStats {
+  return new BlockWindowStats(Number(data.total as number), Number(data.missed as number));
 }
