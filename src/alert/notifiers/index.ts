@@ -13,6 +13,33 @@ type GlobalAlertsConfig = ConfigLoaderData["globalAlerts"];
 
 const log = logger.child({ module: "NotificationDispatcher" });
 
+// Small retry policy for a single notifier send
+const SEND_RETRY_ATTEMPTS = 3;
+const SEND_RETRY_DELAY_MS = 500;
+
+async function sendWithRetry(
+  notifier: Notifier,
+  notification: AlertNotification,
+  chainId: string,
+): Promise<void> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= SEND_RETRY_ATTEMPTS; attempt++) {
+    const result = await notifier.send(notification);
+    if (result.ok) return;
+    lastError = result.error;
+    if (attempt < SEND_RETRY_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS * attempt));
+    }
+  }
+  log.error(
+    "Notifier failed for alert %s on %s after %d attempts: %s",
+    notification.alertId,
+    chainId,
+    SEND_RETRY_ATTEMPTS,
+    lastError,
+  );
+}
+
 export class NotificationDispatcher {
   private notifiers: Notifier[];
   private healthCheckNotifier: HealthCheckNotifier | undefined;
@@ -57,17 +84,7 @@ export class NotificationDispatcher {
     if (this.notifiers.length === 0) return;
     const notification = buildNotification(event, chainId);
     await Promise.all(
-      this.notifiers.map(async (notifier) => {
-        const result = await notifier.send(notification);
-        if (!result.ok) {
-          log.error(
-            "Notifier failed for alert %s on %s: %s",
-            notification.alertId,
-            chainId,
-            result.error,
-          );
-        }
-      }),
+      this.notifiers.map((notifier) => sendWithRetry(notifier, notification, chainId)),
     );
   }
 
