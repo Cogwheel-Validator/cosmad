@@ -1,16 +1,12 @@
-import { config } from "../config";
+import { config } from "../config/app_config";
 import { RWDB } from "../pkgs/database/duckdb/rw_db";
 import logger from "../pkgs/logger";
 import { startEngineServer } from "./server";
 
 /**
- * Engine process entry point — owns a single shared DuckDB file (all chains
+ * Engine process entry point, owns a single shared DuckDB file (all chains
  * partitioned by a chain_id column, not one file per chain) and serves
- * inserts/queries to the ingestion and API processes over a Unix domain
- * socket (see server.ts / client.ts). Kept deliberately narrow (no RPC
- * polling, no HTTP) so it's the least likely of the three processes to crash;
- * if ingestion or the API dies, the engine and the other process keep running
- * unaffected.
+ * inserts/queries to the ingestion and API processes over a Unix socket.
  */
 
 const log = logger.child({ module: "Engine" });
