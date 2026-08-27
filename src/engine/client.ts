@@ -1,6 +1,6 @@
 import { createConnection, type Socket } from "node:net";
 import { BlockWindowStats, type ChainSignatureStats } from "../pkgs/database/analytics";
-import type { IWriteDb } from "../pkgs/database/interfaces";
+import type { IApiReadDb, IWriteDb } from "../pkgs/database/interfaces";
 import type { Alert, Block } from "../pkgs/database/tables";
 import type { Result } from "../pkgs/models/result";
 import {
@@ -30,7 +30,7 @@ function toResult<K extends keyof EngineOps, T>(
 
 /**
  * One socket connection to the engine, shared across every chain a process
- * cares about — EngineClient (below) is a lightweight per-chain view over it.
+ * cares about - EngineClient (below) is a lightweight per-chain view over it.
  */
 export class EngineConnection {
   private socket: Socket;
@@ -62,6 +62,16 @@ export class EngineConnection {
 
   public forChain(chainId: string, chainType: chainType): EngineClient {
     return new EngineClient(this, chainId, chainType);
+  }
+
+  /**
+   * forApiChain returns an IApiReadDb view of the chain, suitable for the API process.
+   * @param chainId unique chain id
+   * @param chainType chain type (bft or tm2)
+   * @returns an IApiReadDb view of the chain
+   */
+  public forApiChain(chainId: string, chainType: chainType): IApiReadDb {
+    return new ApiEngineClient(this, chainId, chainType);
   }
 
   public request(body: EngineRequestBody): Promise<EngineResponse> {
@@ -232,6 +242,36 @@ export class EngineClient implements IWriteDb {
     return toResult<"getChainSignedPercentage", ChainSignatureStats | null>(response, (value) =>
       value ? wireToChainSignatureStats(value) : null,
     );
+  }
+
+  /** Warning: the underlying socket is shared across chains, so call EngineConnection.close() only once. */
+  public close(): void {}
+}
+
+// ApiEngineClient is an IApiReadDb view of the chain, suitable for the API process.
+// It should provide a class, that has less exposure than EngineClient, no write methods
+// and there shouldn't be any way to call write methods on it.
+export class ApiEngineClient implements IApiReadDb {
+  private client: EngineClient;
+
+  constructor(connection: EngineConnection, chainId: string, chainType: chainType) {
+    this.client = new EngineClient(connection, chainId, chainType);
+  }
+
+  public latestBlock(): Promise<Result<Block | null, Error>> {
+    return this.client.latestBlock();
+  }
+
+  public latestBlockHeight(): Promise<Result<bigint | null, Error>> {
+    return this.client.latestBlockHeight();
+  }
+
+  public getAlert(alertKey: string): Promise<Result<Alert | null, Error>> {
+    return this.client.getAlert(alertKey);
+  }
+
+  public getUnclosedAlerts(): Promise<Result<Alert[], Error>> {
+    return this.client.getUnclosedAlerts();
   }
 
   /** Warning: the underlying socket is shared across chains, so call EngineConnection.close() only once. */

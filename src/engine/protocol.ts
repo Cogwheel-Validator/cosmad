@@ -94,7 +94,7 @@ export function wireToAlert(wire: WireAlert): Alert {
   });
 }
 
-/** WireChainSignatureStats is the JSON-safe wire shape for a ChainSignatureStats — already
+/** WireChainSignatureStats is the JSON-safe wire shape for a ChainSignatureStats - already
  * plain numbers/strings, so it's a straight field-for-field mirror. */
 export interface WireChainSignatureStats {
   chainId: string;
@@ -149,14 +149,14 @@ export interface EngineOps {
   };
 }
 
-/** The result type for a given op key — e.g. `ResultOf<"getAlert">` is `WireAlert | null`. */
+/** The result type for a given op key - e.g. `ResultOf<"getAlert">` is `WireAlert | null`. */
 export type ResultOf<K extends keyof EngineOps> = EngineOps[K]["result"];
 
 export type EngineRequestBody = {
   [K in keyof EngineOps]: { type: K } & EngineOps[K]["params"];
 }[keyof EngineOps];
 
-/** Every request type that mutates state — rejected on "reader" role connections. */
+/** Every request type that mutates state - rejected on "reader" role connections. */
 export const WRITE_REQUEST_TYPES: ReadonlySet<EngineRequestBody["type"]> = new Set([
   "appendBlocks",
   "insertBlocks",

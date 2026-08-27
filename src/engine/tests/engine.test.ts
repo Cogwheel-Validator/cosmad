@@ -208,7 +208,7 @@ describe("engine over Unix socket", () => {
   test("getBlockStats aggregates over the wire, excluding signed=-1 blocks entirely", async () => {
     const db = writer.forChain("chain-c", "bft");
     const hash = "1112131415161718191a1b1c1d1e1f20";
-    // signed: 1,1,0,0,0,-1,-1 — total should exclude the two -1s (5), missed should count
+    // signed: 1,1,0,0,0,-1,-1 - total should exclude the two -1s (5), missed should count
     // only the three 0s.
     const signedValues = [1, 1, 0, 0, 0, -1, -1];
     const blocks = signedValues.map(

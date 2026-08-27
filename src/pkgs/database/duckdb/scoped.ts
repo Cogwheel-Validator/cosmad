@@ -73,6 +73,6 @@ export class ChainScopedDb implements IWriteDb {
     return this.db.getChainSignedPercentage(this.chainId, days);
   }
 
-  /** No-op: the underlying connection is shared across chains — call RWDB.close() once. */
+  /** No-op: the underlying connection is shared across chains - call RWDB.close() once. */
   public close(): void {}
 }

@@ -33,3 +33,9 @@ export interface IWriteDb extends IReadDb {
   // Close the database connection.
   close(): void;
 }
+
+// Interface for the subset of IReadDb the API process actually calls.
+export type IApiReadDb = Pick<
+  IReadDb,
+  "latestBlock" | "latestBlockHeight" | "getAlert" | "getUnclosedAlerts" | "close"
+>;
