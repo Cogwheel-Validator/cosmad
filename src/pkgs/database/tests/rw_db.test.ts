@@ -148,42 +148,32 @@ describe("RWDB blocks", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Alert key generation
+// Alert ID generation
 // ---------------------------------------------------------------------------
 
-describe("Alert.generateKey", () => {
-  test("is deterministic for the same inputs", () => {
-    const key = Alert.generateKey("cosmos-hub", "missed_blocks");
-    expect(Alert.generateKey("cosmos-hub", "missed_blocks")).toBe(key);
+describe("Alert.generateId", () => {
+  test("produces a unique id on every call - a chain's alert type can open/close many times, and each incident needs its own row", () => {
+    const a = Alert.generateId();
+    const b = Alert.generateId();
+    expect(a).not.toBe(b);
   });
 
-  test("produces a 64-character hex string (SHA-256)", () => {
-    const key = Alert.generateKey("cosmos-hub", "missed_blocks");
-    expect(key).toHaveLength(64);
-    expect(key).toMatch(/^[0-9a-f]{64}$/);
-  });
-
-  test("differs when chainId differs", () => {
-    expect(Alert.generateKey("chain-a", "missed_blocks")).not.toBe(
-      Alert.generateKey("chain-b", "missed_blocks"),
-    );
-  });
-
-  test("differs when alertType differs", () => {
-    expect(Alert.generateKey("cosmos-hub", "missed_blocks")).not.toBe(
-      Alert.generateKey("cosmos-hub", "high_latency"),
-    );
+  test("produces a non-empty string that fits the alert_id column (varchar(64))", () => {
+    const id = Alert.generateId();
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThan(0);
+    expect(id.length).toBeLessThanOrEqual(64);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Alerts — write + read
+// Alerts - write + read
 // ---------------------------------------------------------------------------
 
 describe("RWDB alerts", () => {
   const alertChainId = "test-chain";
-  const openKey = Alert.generateKey(alertChainId, "missed_blocks");
-  const closedKey = Alert.generateKey(alertChainId, "closed_event");
+  const openKey = Alert.generateId();
+  const closedKey = Alert.generateId();
   const openedAt = new Date("2026-03-01T12:00:00.000Z");
 
   test("getAlert returns null for a non-existent key", async () => {
@@ -232,7 +222,7 @@ describe("RWDB alerts", () => {
   });
 
   test("insertAlert inserts a second open alert", async () => {
-    const key2 = Alert.generateKey(alertChainId, "high_latency");
+    const key2 = Alert.generateId();
     const alert2 = new Alert({
       alertId: key2,
       chainId: alertChainId,
@@ -275,7 +265,7 @@ describe("RWDB alerts", () => {
   });
 
   test("getUnclosedAlerts is scoped to the given chain", async () => {
-    const otherKey = Alert.generateKey("other-alert-chain", "missed_blocks");
+    const otherKey = Alert.generateId();
     await db.insertAlert(
       new Alert({
         alertId: otherKey,
