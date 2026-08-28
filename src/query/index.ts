@@ -9,13 +9,16 @@ import { RpcClient } from "./rpc/client";
 import type { BlockCommitResponse } from "./rpc/types";
 
 export class QueryOperator {
+  private static readonly DEFAULT_RANGE_CHUNK_SIZE = 25;
   private healthyApis: string[] = [];
   private unhealthyApis: string[] = [];
   private apiClient: ApiClient | undefined;
+  private apiIndex = 0;
 
   private healthyRpcs: string[] = [];
   private unhealthyRpcs: string[] = [];
   private rpcClient: RpcClient;
+  private rpcIndex = 0;
 
   private chainId: string;
   private chainType: "bft" | "tm2";
@@ -93,7 +96,7 @@ export class QueryOperator {
       }
       await this.rpcHealthCheckInFlight;
     }
-    const url = this.healthyRpcs[Math.floor(Math.random() * this.healthyRpcs.length)];
+    const url = this.healthyRpcs[this.rpcIndex++ % this.healthyRpcs.length];
     if (!url) throw new Error(`No healthy RPC endpoints available for chain ${this.chainId}`);
     return url;
   }
@@ -110,18 +113,18 @@ export class QueryOperator {
       }
       await this.apiHealthCheckInFlight;
     }
-    const url = this.healthyApis[Math.floor(Math.random() * this.healthyApis.length)];
+    const url = this.healthyApis[this.apiIndex++ % this.healthyApis.length];
     if (!url) throw new Error(`No healthy API endpoints available for chain ${this.chainId}`);
     return url;
   }
 
   // Retries fn up to retryAttempts times with exponential backoff (100ms, 200ms, 400ms...).
   // fn (or getHealthyRpc/getHealthyApi called inside it) can throw rather than resolve to
-  // {ok:false} — e.g. "No healthy RPC endpoints available" — so those throws are caught here
+  // {ok:false} - e.g. "No healthy RPC endpoints available" - so those throws are caught here
   // and treated as a failed attempt too. Without this, a fully-unhealthy RPC set would reject
   // the returned promise instead of resolving to Response<T>, breaking every caller's `.ok`
   // check and escaping as an unhandled rejection (previously this crashed the whole ingestion
-  // process — and every other chain's worker with it — the moment one chain's RPCs went down).
+  // process - and every other chain's worker with it - the moment one chain's RPCs went down).
   private async withRetry<T>(fn: () => Promise<Response<T>>): Promise<Response<T>> {
     let lastResult: Response<T> = { ok: false, error: "No attempts made" };
     for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
@@ -138,15 +141,10 @@ export class QueryOperator {
     return lastResult;
   }
 
-  // Default max number of commit requests in flight at once for a single getRangeCommits call,
-  // so a large gap (e.g. after downtime) doesn't fire hundreds of concurrent requests at the
-  // RPCs. Overridable per chain via ChainConfig.rangeChunkSize.
-  private static readonly DEFAULT_RANGE_CHUNK_SIZE = 25;
-
   /**
    * Returns commits for a given range of block heights [from, to).
    * Requests are batched sequentially in chunks of `rangeChunkSize`, each chunk run
-   * concurrently — so only one chunk's worth of requests is ever in flight.
+   * concurrently - so only one chunk's worth of requests is ever in flight.
    * @param from - The starting block height (inclusive).
    * @param to - The ending block height (exclusive).
    * @returns A promise that resolves to an array of commit responses.
@@ -189,9 +187,9 @@ export class QueryOperator {
   /**
    * Retrieves validator data for a given validator address, optionally at a specific height.
    * @param valoperAddr - The validator address to retrieve data for.
-   * @param height optional — sent via the x-cosmos-block-height header to query state as of a
-   *  past height, e.g. to check active-set status at the height of a specific missed block
-   *  rather than the chain's current tip. */
+   * @param height optional - sent via the x-cosmos-block-height header to query state as of a
+   * @returns A promise that resolves to the validator data response.
+   */
   public async getValidatorData(
     valoperAddr: string,
     height?: number,

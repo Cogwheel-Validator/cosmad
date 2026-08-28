@@ -111,6 +111,11 @@ export const BlockCommitSchema = type({
       header: Header,
       commit: CosmosCommitExclusive.or(Tm2CommitExclusive),
     },
+    // VERY IMPORTANT!
+    // Nodes take time to reach the consensus. They can technically reach it even when not
+    // all of the votes have been recorded. So what this value does it tells the RPC to return
+    // only fully committed blocks.
+    "canonical?": "boolean",
   }),
 });
 

@@ -21,6 +21,7 @@ function fakeDb(overrides: Partial<IWriteDb> = {}): IWriteDb {
     getBlockByRange: vi.fn(),
     getBlockStats: vi.fn(),
     getChainSignedPercentage: vi.fn(),
+    getDailySignedStats: vi.fn(),
     close: vi.fn(),
     ...overrides,
   } as IWriteDb;

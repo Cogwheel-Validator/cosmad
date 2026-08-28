@@ -4,7 +4,7 @@ export const ValidatorData = type({
   validator: type({
     operatorAddress: "string",
     // grpc-gateway JSON-encodes Any as {"@type": "...", key: "..."} (Amino-style), not the
-    // protobufjs {typeUrl, value} shape — and "@type" isn't snake_case so camelcaseKeys leaves
+    // protobufjs {typeUrl, value} shape - and "@type" isn't snake_case so camelcaseKeys leaves
     // it untouched.
     consensusPubkey: type({
       "@type": "string",
@@ -93,7 +93,7 @@ export const ValSet = type({
 
 export type ValSetDataResponse = typeof ValSet.infer;
 
-// grpc-gateway error responses vary by version/endpoint — commonly {code, message, details},
+// grpc-gateway error responses vary by version/endpoint - commonly {code, message, details},
 // with the legacy top-level "error" string field frequently absent. Keep this permissive so a
 // real error response doesn't itself fail to parse.
 export const ValSetError = type({

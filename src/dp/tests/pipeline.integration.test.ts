@@ -41,7 +41,7 @@ function hashFor(height: number): string {
 const FAKE_SIGNATURE =
   "VNMOnZJIFUcZmmBSdfewTpsdAnviEL4PMcc9qaiI/z1XdP2XR4ENAoD+L4hg1FmtzlLnBWoujeJ/bwKrp5+CBw==";
 
-function makeCommit(height: number, signed: boolean): unknown {
+function makeCommit(height: number, signed: boolean, canonical = true): unknown {
   const clone = structuredClone(commitFixture);
   const { header, commit } = clone.result.signed_header;
   header.height = String(height);
@@ -62,6 +62,7 @@ function makeCommit(height: number, signed: boolean): unknown {
         timestamp: "0001-01-01T00:00:00Z",
         signature: null,
       };
+  clone.result.canonical = canonical;
   return clone;
 }
 
@@ -134,6 +135,7 @@ const valsetFixture = {
 // heights in range are signed vs missed by the tracked validator.
 let currentTip = 0;
 const signedByHeight = new Map<number, boolean>();
+const nonCanonicalHeights = new Set<number>();
 
 function setTip(height: number, missedRange: number[] = []) {
   currentTip = height;
@@ -146,7 +148,9 @@ beforeEach(() => {
       if (url.includes("/commit")) {
         const match = url.match(/height=(\d+)/);
         const height = match ? Number(match[1]) : currentTip;
-        return axiosOk(makeCommit(height, signedByHeight.get(height) ?? true));
+        return axiosOk(
+          makeCommit(height, signedByHeight.get(height) ?? true, !nonCanonicalHeights.has(height)),
+        );
       }
       if (url.endsWith("/status")) {
         const height = url.startsWith(RPC_1) ? currentTip - 1 : currentTip;
@@ -345,5 +349,54 @@ describe("ingest pipeline integration", () => {
     expect(unclosed.value).toHaveLength(0);
 
     expect(vi.mocked(axios.post)).toHaveBeenCalledTimes(3);
+  });
+
+  test("a non-canonical (still-finalizing) tip commit is not ingested; it's picked up once it settles", async () => {
+    // The tip has moved to 110, and the validator did sign it - but the RPC node reports
+    // canonical: false, meaning not every validator's vote has necessarily arrived here yet.
+    // This must NOT be recorded as a miss.
+    nonCanonicalHeights.add(110);
+    setTip(110);
+    signedByHeight.set(110, true);
+
+    await doPoll(
+      chain,
+      query,
+      ingest,
+      alertEval,
+      dispatcher,
+      writeDb,
+      VALCONS_ADDRESS,
+      20,
+      undefined,
+    );
+
+    let heights = await allBlockHeights();
+    expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
+    const latestAfterNonCanonical = await db.latestBlock(CHAIN_ID, "bft");
+    assert(latestAfterNonCanonical.ok);
+    expect(latestAfterNonCanonical.value?.height).toBe(109n);
+
+    // The next poll finds the same height now canonical (settled) - it gets ingested correctly.
+    nonCanonicalHeights.delete(110);
+
+    await doPoll(
+      chain,
+      query,
+      ingest,
+      alertEval,
+      dispatcher,
+      writeDb,
+      VALCONS_ADDRESS,
+      20,
+      undefined,
+    );
+
+    heights = await allBlockHeights();
+    expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
+    const latest = await db.latestBlock(CHAIN_ID, "bft");
+    assert(latest.ok);
+    expect(latest.value?.height).toBe(110n);
+    expect(latest.value?.signed).toBe(1);
   });
 });

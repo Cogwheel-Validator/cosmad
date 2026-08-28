@@ -111,7 +111,7 @@ async function resolveActiveFallback(
  * commitToBlock converts a raw commit into a Block, resolving the tri-state `signed` value:
  * -1 = validator wasn't in the active set (bft only), 0 = active but missed, 1 = active and signed.
  * A signature entry present in the commit is definitive (the validator is obviously active if
- * it has an entry at all) — active-set membership is only checked when no entry is found.
+ * it has an entry at all) - active-set membership is only checked when no entry is found.
  * @param valconsHex precomputed uppercase hex consensus address (bft only, undefined for tm2)
  * @param activeSetHex cached active set from worker startup (bft only, undefined if unavailable)
  * @param fallbackCache memoized per-poll cache for the resolveActiveFallback lookup
@@ -134,13 +134,13 @@ export async function commitToBlock(
   let signature: string | undefined;
 
   if ("signatures" in commitData && commitData.signatures != null) {
-    // Cosmos BFT path — identify validator by hex consensus address
+    // Cosmos BFT path - identify validator by hex consensus address
     const sig = commitData.signatures.find((s) => s != null && s.validatorAddress === valconsHex);
     if (sig != null) {
       signed = sig.blockIdFlag === 2 ? 1 : 0;
       if (signed === 1 && sig.signature != null) signature = sig.signature;
     } else if (activeSetHex?.has(valconsHex ?? "")) {
-      // No signature entry, but the validator is a known active-set member — a clear miss,
+      // No signature entry, but the validator is a known active-set member - a clear miss,
       // no further request needed.
       signed = 0;
     } else {
@@ -154,7 +154,7 @@ export async function commitToBlock(
       signed = active ? 0 : -1;
     }
   } else if ("precommits" in commitData && commitData.precommits != null) {
-    // TM2 path — identify validator by operator address, no active-set option
+    // TM2 path - identify validator by operator address, no active-set option
     const addr = chain.valoperAddress;
     const pre = commitData.precommits.find((p) => p != null && p.validatorAddress === addr);
     signed = pre != null && pre.type === 2 ? 1 : 0;
@@ -176,8 +176,8 @@ export async function commitToBlock(
 
 /** Exported for integration tests that want to drive individual poll cycles directly.
  * @param valconsHex precomputed uppercase hex consensus address (bft only, undefined for tm2)
- * @param signingWindowSize precomputed once at worker startup — see resolveSigningWindowSize
- * @param activeSetHex cached active set fetched once at worker startup — see fetchActiveSetHex */
+ * @param signingWindowSize precomputed once at worker startup - see resolveSigningWindowSize
+ * @param activeSetHex cached active set fetched once at worker startup - see fetchActiveSetHex */
 export async function doPoll(
   chain: ChainConfig,
   query: QueryOperator,
@@ -236,9 +236,19 @@ export async function doPoll(
         // past a gap. The DB stays contiguous, and this exact height gets retried (and logged
         // again) on every subsequent poll until it succeeds or allowBlockGaps is set.
         chainLog.warn(
-          "Failed to fetch commit at height %d, stopping this poll's ingestion here — will retry: %s",
+          "Failed to fetch commit at height %d, stopping this poll's ingestion here - will retry: %s",
           heights[i],
           result.error,
+        );
+        break;
+      }
+      if (result.data.result.canonical === false) {
+        // This is the chain's current tip: the block is finalized, but not every validator's
+        // precommit vote has necessarily reached this RPC node yet.
+        // Always stop-and-retry here regardless of allowBlockGaps.
+        chainLog.debug(
+          "Commit at height %d is not yet canonical (tip still finalizing), stopping this poll's ingestion here - will retry",
+          heights[i],
         );
         break;
       }
@@ -264,7 +274,7 @@ export async function doPoll(
           continue;
         }
         chainLog.warn(
-          "Failed to parse commit into block at height %d, stopping this poll's ingestion here — will retry: %s",
+          "Failed to parse commit into block at height %d, stopping this poll's ingestion here - will retry: %s",
           heights[i],
           err,
         );
@@ -318,7 +328,7 @@ export async function doPoll(
   const tailBlocks = [...tailResult.value].sort((a, b) => (a.height < b.height ? -1 : 1));
 
   // The percentageMissedBlocksAlert window can be thousands of blocks wide (a chain's
-  // signed_blocks_window) — fetch only the aggregate counts, never the individual rows.
+  // signed_blocks_window) - fetch only the aggregate counts, never the individual rows.
   const statsSpan = BigInt(signingWindowSize - 1);
   const statsStart = latestHeight - statsSpan > 0n ? latestHeight - statsSpan : 1n;
   const statsResult = await db.getBlockStats(statsStart, latestHeight);
