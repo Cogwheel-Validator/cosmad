@@ -3,7 +3,7 @@ import { type DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import type { Logger } from "pino";
 import logger from "../../logger";
 import type { Result } from "../../models/result";
-import type { BlockWindowStats, ChainSignatureStats } from "../analytics";
+import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
 import type { IWriteDb } from "../interfaces";
 import { generateCreateTableStatements } from "../sql/generate";
 import type { Constructor } from "../sql/types";
@@ -158,5 +158,12 @@ export class RWDB {
     endHeight: bigint,
   ): Promise<Result<BlockWindowStats, Error>> {
     return blockQueries.getBlockStats(this.conn, this.log, chainId, startHeight, endHeight);
+  }
+
+  public getDailySignedStats(
+    chainId: string,
+    days: number,
+  ): Promise<Result<DailyBlockStats[], Error>> {
+    return blockQueries.getDailySignedStats(this.conn, this.log, chainId, days);
   }
 }

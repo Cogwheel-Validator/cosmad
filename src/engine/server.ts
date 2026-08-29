@@ -87,6 +87,15 @@ const handlers: Handlers = {
     const r = await db.getChainSignedPercentage(p.chainId, p.days);
     return r.ok ? { ok: true, value: r.value ? chainSignatureStatsToWire(r.value) : null } : r;
   },
+  getDailySignedStats: async (p, { db }) => {
+    const r = await db.getDailySignedStats(p.chainId, p.days);
+    return r.ok
+      ? {
+          ok: true,
+          value: r.value.map((s) => ({ date: s.date, total: s.total, missed: s.missed })),
+        }
+      : r;
+  },
 };
 
 async function dispatch(

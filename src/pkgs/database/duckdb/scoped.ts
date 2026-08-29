@@ -1,5 +1,5 @@
 import type { Result } from "../../models/result";
-import type { BlockWindowStats, ChainSignatureStats } from "../analytics";
+import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
 import type { IWriteDb } from "../interfaces";
 import type { Alert, Block } from "../tables";
 import type { RWDB } from "./rw_db";
@@ -71,6 +71,10 @@ export class ChainScopedDb implements IWriteDb {
     days: number,
   ): Promise<Result<ChainSignatureStats | null, Error>> {
     return this.db.getChainSignedPercentage(this.chainId, days);
+  }
+
+  public getDailySignedStats(days: number): Promise<Result<DailyBlockStats[], Error>> {
+    return this.db.getDailySignedStats(this.chainId, days);
   }
 
   /** No-op: the underlying connection is shared across chains - call RWDB.close() once. */

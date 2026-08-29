@@ -19,3 +19,15 @@ export class BlockWindowStats {
     this.missed = missed;
   }
 }
+
+export class DailyBlockStats {
+  public date: string;
+  public total: number;
+  public missed: number;
+
+  constructor(date: string, total: number, missed: number) {
+    this.date = date;
+    this.total = total;
+    this.missed = missed;
+  }
+}

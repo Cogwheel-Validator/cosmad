@@ -4,7 +4,7 @@ import {
   DuckDBTimestampValue,
   type DuckDBValue,
 } from "@duckdb/node-api";
-import { BlockWindowStats, ChainSignatureStats } from "../analytics";
+import { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
 import { Alert, Block } from "../tables";
 
 export interface BlockRow {
@@ -88,14 +88,21 @@ export function rowToAlert(data: Record<string, DuckDBValue>): Alert {
   });
 }
 
-export function rowToSignStats(data: Record<string, DuckDBValue>): ChainSignatureStats {
-  return new ChainSignatureStats(
-    data.chain_id as string,
-    data.signed_blocks as number,
-    data.missed_blocks as number,
-  );
+export function rowToSignStats(
+  data: Record<string, DuckDBValue>,
+  chainId: string,
+): ChainSignatureStats {
+  const total = Number(data.total as number);
+  const missed = Number(data.missed as number);
+  return new ChainSignatureStats(chainId, (total - missed) / total, missed / total);
 }
 
 export function rowToBlockWindowStats(data: Record<string, DuckDBValue>): BlockWindowStats {
   return new BlockWindowStats(Number(data.total as number), Number(data.missed as number));
+}
+
+export function rowToDailyBlockStats(data: Record<string, DuckDBValue>): DailyBlockStats {
+  const day = data.day as DuckDBTimestampValue;
+  const date = new Date(Number(day.micros) / 1000).toISOString().slice(0, 10);
+  return new DailyBlockStats(date, Number(data.total as number), Number(data.missed as number));
 }

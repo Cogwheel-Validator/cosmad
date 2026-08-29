@@ -148,6 +148,109 @@ describe("RWDB blocks", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Signed-block stats (dashboard/stats API data source)
+// ---------------------------------------------------------------------------
+
+describe("RWDB signed-block stats", () => {
+  const statsChainId = "stats-chain";
+  const hash = "5152535455565758595a5b5c5d5e5f60";
+  const signature = "dGVzdAo=";
+
+  test("getChainSignedPercentage returns null when there are no blocks in the window", async () => {
+    const result = await db.getChainSignedPercentage(statsChainId, 30);
+    expect(result.ok).toBe(true);
+    assert(result.ok);
+    expect(result.value).toBeNull();
+  });
+
+  test("getDailySignedStats returns an empty array when there are no blocks in the window", async () => {
+    const result = await db.getDailySignedStats(statsChainId, 30);
+    expect(result.ok).toBe(true);
+    assert(result.ok);
+    expect(result.value).toEqual([]);
+  });
+
+  test("getChainSignedPercentage/getDailySignedStats aggregate recent blocks correctly", async () => {
+    const now = Date.now();
+    const today = new Date(now);
+    const yesterday = new Date(now - 24 * 60 * 60 * 1000);
+    // today: 1 signed, 1 missed, 1 not-in-active-set (excluded from total)
+    // yesterday: 2 signed, 0 missed
+    const signedValues: [Date, number][] = [
+      [today, 1],
+      [today, 0],
+      [today, -1],
+      [yesterday, 1],
+      [yesterday, 1],
+    ];
+    const blocks = signedValues.map(
+      ([time, signed], i) =>
+        new Block({
+          chainId: statsChainId,
+          height: BigInt(i),
+          hash,
+          time,
+          signed,
+          signature,
+          chainType: "bft",
+        }),
+    );
+    const insertResult = await db.appendBlocks(statsChainId, blocks);
+    assert(insertResult.ok);
+
+    const percentResult = await db.getChainSignedPercentage(statsChainId, 30);
+    assert(percentResult.ok);
+    expect(percentResult.value).not.toBeNull();
+    expect(percentResult.value?.chainId).toBe(statsChainId);
+    // total = 4 (excludes the one -1), missed = 1 -> 3/4 signed, 1/4 missed
+    expect(percentResult.value?.percentageSigned).toBeCloseTo(0.75);
+    expect(percentResult.value?.percentageMissed).toBeCloseTo(0.25);
+
+    const dailyResult = await db.getDailySignedStats(statsChainId, 30);
+    assert(dailyResult.ok);
+    expect(dailyResult.value).toHaveLength(2);
+    // oldest first
+    const [day1, day2] = dailyResult.value;
+    expect(day1.total).toBe(2);
+    expect(day1.missed).toBe(0);
+    expect(day2.total).toBe(2);
+    expect(day2.missed).toBe(1);
+  });
+
+  test("getDailySignedStats excludes blocks older than the requested window", async () => {
+    const oldChainId = "stats-chain-old";
+    const now = Date.now();
+    const wayBack = new Date(now - 40 * 24 * 60 * 60 * 1000);
+    const recent = new Date(now);
+    await db.appendBlocks(oldChainId, [
+      new Block({
+        chainId: oldChainId,
+        height: 0n,
+        hash,
+        time: wayBack,
+        signed: 1,
+        signature,
+        chainType: "bft",
+      }),
+      new Block({
+        chainId: oldChainId,
+        height: 1n,
+        hash,
+        time: recent,
+        signed: 1,
+        signature,
+        chainType: "bft",
+      }),
+    ]);
+
+    const result = await db.getDailySignedStats(oldChainId, 30);
+    assert(result.ok);
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0].total).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Alert ID generation
 // ---------------------------------------------------------------------------
 

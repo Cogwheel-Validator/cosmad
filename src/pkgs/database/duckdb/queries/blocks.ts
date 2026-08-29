@@ -2,6 +2,7 @@ import {
   BLOB,
   type DuckDBConnection,
   DuckDBDataChunk,
+  DuckDBTimestampValue,
   TIMESTAMP,
   TINYINT,
   UBIGINT,
@@ -9,10 +10,24 @@ import {
 } from "@duckdb/node-api";
 import type { Logger } from "pino";
 import type { Result } from "../../../models/result";
-import type { BlockWindowStats, ChainSignatureStats } from "../../analytics";
+import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../../analytics";
 import type { Block } from "../../tables";
 import { toError } from "../errors";
-import { blockToRow, rowToBlock, rowToBlockWindowStats, rowToSignStats } from "../mappers";
+import {
+  blockToRow,
+  rowToBlock,
+  rowToBlockWindowStats,
+  rowToDailyBlockStats,
+  rowToSignStats,
+} from "../mappers";
+
+const MAX_STATS_DAYS = 365;
+
+function daysCutoff(days: number): DuckDBTimestampValue {
+  const clamped = Math.min(Math.max(Math.trunc(days), 1), MAX_STATS_DAYS);
+  const cutoff = Date.now() - clamped * 24 * 60 * 60 * 1000;
+  return new DuckDBTimestampValue(BigInt(cutoff) * 1000n);
+}
 
 const APPENDER_CHUNK_ROWS = 2048;
 
@@ -174,33 +189,49 @@ export async function getChainSignedPercentage(
   days: number,
 ): Promise<Result<ChainSignatureStats | null, Error>> {
   const sql = `
-    WITH current_time AS (
-      SELECT current_timestamp() as now
-    ),
-    missed AS (
-      SELECT count() * 1.0 as missed
-      FROM blocks
-      CROSS JOIN current_time
-      WHERE chain_id = ? AND time >= current_time.now - INTERVAL '? days' AND time <= current_time.now
-    ),
-    total AS (
-      SELECT count() * 1.0 as total
-      FROM blocks
-      CROSS JOIN current_time
-      WHERE chain_id = ? AND time >= current_time.now - INTERVAL '? days' AND time <= current_time.now
-    )
     SELECT
-      (t.total - m.missed) / t.total as signed,
-      m.missed / t.total as missed
-    FROM total t
-    CROSS JOIN missed m`;
+      count(*) FILTER (WHERE signed != -1) as total,
+      count(*) FILTER (WHERE signed = 0) as missed
+    FROM blocks
+    WHERE chain_id = ? AND time >= ?`;
   try {
-    const result = await conn.run(sql, [chainId, days, chainId, days]);
+    const result = await conn.run(sql, [chainId, daysCutoff(days)]);
     const row = await result.getRowObjects(); // only one row
-    if (row.length === 0) return { ok: true, value: null };
-    return { ok: true, value: rowToSignStats(row[0]) };
+    if (row.length === 0 || Number(row[0]?.total ?? 0) === 0) return { ok: true, value: null };
+    return { ok: true, value: rowToSignStats(row[0], chainId) };
   } catch (error) {
     log.error("Error getting chain signed percentage: %s", error);
+    return { ok: false, error: toError(error) };
+  }
+}
+
+/**
+ * getDailySignedStats returns by UTC signed/missed block counts for a chain.
+ * @param chainId a unique id for the chain
+ * @param days an integer number of days to look back (clamped to [1, 365])
+ * @returns a promise wrapped result of the chain's daily signed/missed stats
+ */
+export async function getDailySignedStats(
+  conn: DuckDBConnection,
+  log: Logger,
+  chainId: string,
+  days: number,
+): Promise<Result<DailyBlockStats[], Error>> {
+  const sql = `
+    SELECT
+      date_trunc('day', time) as day,
+      count(*) FILTER (WHERE signed != -1) as total,
+      count(*) FILTER (WHERE signed = 0) as missed
+    FROM blocks
+    WHERE chain_id = ? AND time >= ?
+    GROUP BY day
+    ORDER BY day`;
+  try {
+    const result = await conn.run(sql, [chainId, daysCutoff(days)]);
+    const rows = await result.getRowObjects();
+    return { ok: true, value: rows.map(rowToDailyBlockStats) };
+  } catch (error) {
+    log.error("Error getting daily signed stats: %s", error);
     return { ok: false, error: toError(error) };
   }
 }
@@ -267,7 +298,8 @@ export async function getBlockByRange(
       signature
     FROM blocks
     WHERE
-      chain_id = ? AND height >= ? AND height <= ?`;
+      chain_id = ? AND height >= ? AND height <= ?
+    ORDER BY height ASC`;
   try {
     const result = await conn.run(sql, [chainId, startHeight, endHeight]);
     const rows = await result.getRowObjects();

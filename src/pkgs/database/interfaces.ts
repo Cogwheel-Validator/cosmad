@@ -1,5 +1,5 @@
 import type { Result } from "../models/result";
-import type { BlockWindowStats, ChainSignatureStats } from "./analytics";
+import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "./analytics";
 import type { Alert, Block } from "./tables";
 
 // Interface for methods that provide read only access to the database.
@@ -11,6 +11,7 @@ export interface IReadDb {
   getBlockByRange(startHeight: bigint, endHeight: bigint): Promise<Result<Block[], Error>>;
   getBlockStats(startHeight: bigint, endHeight: bigint): Promise<Result<BlockWindowStats, Error>>;
   getChainSignedPercentage(days: number): Promise<Result<ChainSignatureStats | null, Error>>;
+  getDailySignedStats(days: number): Promise<Result<DailyBlockStats[], Error>>;
   getAlert(alertKey: string): Promise<Result<Alert | null, Error>>;
   getUnclosedAlerts(): Promise<Result<Alert[], Error>>;
   close(): void;
@@ -37,5 +38,13 @@ export interface IWriteDb extends IReadDb {
 // Interface for the subset of IReadDb the API process actually calls.
 export type IApiReadDb = Pick<
   IReadDb,
-  "latestBlock" | "latestBlockHeight" | "getAlert" | "getUnclosedAlerts" | "close"
+  | "latestBlock"
+  | "latestBlockHeight"
+  | "getAlert"
+  | "getUnclosedAlerts"
+  | "close"
+  | "getChainSignedPercentage"
+  | "getDailySignedStats"
+  | "getBlockByHeight"
+  | "getBlockByRange"
 >;

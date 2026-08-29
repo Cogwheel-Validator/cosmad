@@ -1,5 +1,9 @@
 import { createConnection, type Socket } from "node:net";
-import { BlockWindowStats, type ChainSignatureStats } from "../pkgs/database/analytics";
+import {
+  BlockWindowStats,
+  type ChainSignatureStats,
+  DailyBlockStats,
+} from "../pkgs/database/analytics";
 import type { IApiReadDb, IWriteDb } from "../pkgs/database/interfaces";
 import type { Alert, Block } from "../pkgs/database/tables";
 import type { Result } from "../pkgs/models/result";
@@ -244,6 +248,17 @@ export class EngineClient implements IWriteDb {
     );
   }
 
+  public async getDailySignedStats(days: number): Promise<Result<DailyBlockStats[], Error>> {
+    const response = await this.connection.request({
+      type: "getDailySignedStats",
+      chainId: this.chainId,
+      days,
+    });
+    return toResult<"getDailySignedStats", DailyBlockStats[]>(response, (value) =>
+      value.map((v) => new DailyBlockStats(v.date, v.total, v.missed)),
+    );
+  }
+
   /** Warning: the underlying socket is shared across chains, so call EngineConnection.close() only once. */
   public close(): void {}
 }
@@ -272,6 +287,24 @@ export class ApiEngineClient implements IApiReadDb {
 
   public getUnclosedAlerts(): Promise<Result<Alert[], Error>> {
     return this.client.getUnclosedAlerts();
+  }
+
+  public getChainSignedPercentage(
+    days: number,
+  ): Promise<Result<ChainSignatureStats | null, Error>> {
+    return this.client.getChainSignedPercentage(days);
+  }
+
+  public getDailySignedStats(days: number): Promise<Result<DailyBlockStats[], Error>> {
+    return this.client.getDailySignedStats(days);
+  }
+
+  public getBlockByHeight(height: bigint): Promise<Result<Block | null, Error>> {
+    return this.client.getBlockByHeight(height);
+  }
+
+  public getBlockByRange(start: bigint, end: bigint): Promise<Result<Block[], Error>> {
+    return this.client.getBlockByRange(start, end);
   }
 
   /** Warning: the underlying socket is shared across chains, so call EngineConnection.close() only once. */
