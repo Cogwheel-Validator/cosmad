@@ -1,3 +1,4 @@
 allowBuilds:
   esbuild: true
+  vue-demi: true
 minimumReleaseAge: 10080

@@ -1,10 +1,10 @@
-import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
+import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
   server: {
-    port: 5173,
     // In standalone dev mode (pnpm --filter @cosmad/frontend dev),
     // the API runs on :3000 and Vite proxies these paths across.
     // When started via the runner (pnpm dev), Vite runs in middleware

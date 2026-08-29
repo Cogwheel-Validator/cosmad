@@ -1,4 +1,14 @@
-*, *::before, *::after {
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes:
+    light --default,
+    dark --prefersdark,
+    forest;
+}
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -15,8 +25,8 @@
   --red: #f85149;
   --yellow: #d29922;
   --radius: 6px;
-  --font: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Mono', monospace;
+  --font: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Mono", monospace;
 }
 
 body {
