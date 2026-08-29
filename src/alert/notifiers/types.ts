@@ -1,4 +1,5 @@
 import type { Result } from "@/pkgs/models/result";
+import type { AlertContext } from "../types";
 
 export interface AlertNotification {
   chainId: string;
@@ -6,6 +7,7 @@ export interface AlertNotification {
   alertId: string;
   kind: "opened" | "closed" | "repeat";
   message: string;
+  context: AlertContext;
 }
 
 export interface Notifier {

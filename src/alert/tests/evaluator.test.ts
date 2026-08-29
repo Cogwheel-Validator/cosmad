@@ -36,6 +36,14 @@ describe("AlertEvaluator.checkPercentageMiss via evaluate()", () => {
     expect(events).toHaveLength(1);
     expect(events[0]?.kind).toBe("open");
     expect(events[0]?.alert.alertType).toBe("percentage_miss");
+    expect(events[0]?.context).toEqual({
+      latestBlockHeight: "1",
+      latestBlockTime: tailBlocks[0]?.time,
+      windowTotal: 100,
+      windowMissed: 20,
+      windowMissedPercent: 20,
+      threshold: 10,
+    });
   });
 
   test("does not breach when the missed ratio is under threshold", () => {

@@ -1,7 +1,7 @@
 import type { AlertConfig } from "@/config/alert_types";
 import type { ConfigLoaderData } from "@/config/config_loader";
 import logger from "@/pkgs/logger";
-import type { AlertEvent } from "../types";
+import type { AlertContext, AlertEvent } from "../types";
 import { DiscordNotifier } from "./discord";
 import { PagerdutyNotifier } from "./pagerduty";
 import { TelegramNotifier } from "./telegram";
@@ -64,8 +64,49 @@ export class NotificationDispatcher {
   }
 }
 
-function buildNotification(event: AlertEvent, chainId: string): AlertNotification {
-  const { alert } = event;
+/**
+ * Renders an AlertContext into a short human-readable clause describing the chain's
+ * current state which is appended as a comment, or description depending on the notification
+ * service.
+ * @param alertType The type of alert being evaluated.
+ * @param context The alert context containing the chain's current state.
+ * @returns A human-readable string describing the chain's current state.
+ */
+function formatAlertDetails(alertType: string, context: AlertContext): string {
+  const details: string[] = [];
+  switch (alertType) {
+    case "percentage_miss":
+      if (context.windowMissedPercent != null && context.windowTotal != null) {
+        details.push(
+          `${context.windowMissedPercent.toFixed(2)}% missed over the last ${context.windowTotal} blocks ` +
+            `(${context.windowMissed}/${context.windowTotal}, threshold ${context.threshold}%)`,
+        );
+      }
+      break;
+    case "consecutive_miss":
+      if (context.consecutiveMissed != null) {
+        details.push(
+          `${context.consecutiveMissed} consecutive misses (threshold ${context.threshold})`,
+        );
+      }
+      break;
+    case "stalled":
+      if (context.threshold != null) {
+        details.push(`no new block seen in over ${context.threshold}s`);
+      }
+      break;
+  }
+  if (context.latestBlockHeight != null) {
+    const time =
+      context.latestBlockTime != null ? ` at ${context.latestBlockTime.toISOString()}` : "";
+    details.push(`latest known block ${context.latestBlockHeight}${time}`);
+  }
+  return details.length > 0 ? ` (${details.join("; ")})` : "";
+}
+
+export function buildNotification(event: AlertEvent, chainId: string): AlertNotification {
+  const { alert, context } = event;
+  const details = formatAlertDetails(alert.alertType, context);
   switch (event.kind) {
     case "open":
       return {
@@ -73,7 +114,8 @@ function buildNotification(event: AlertEvent, chainId: string): AlertNotificatio
         alertType: alert.alertType,
         alertId: alert.alertId,
         kind: "opened",
-        message: `[${chainId}] Alert opened: ${alert.alertType}`,
+        context,
+        message: `[${chainId}] Alert opened: ${alert.alertType}${details}`,
       };
     case "repeat":
       return {
@@ -81,7 +123,8 @@ function buildNotification(event: AlertEvent, chainId: string): AlertNotificatio
         alertType: alert.alertType,
         alertId: alert.alertId,
         kind: "repeat",
-        message: `[${chainId}] Alert still open (repeat #${alert.repeatCount + 1}): ${alert.alertType}`,
+        context,
+        message: `[${chainId}] Alert still open (repeat #${alert.repeatCount + 1}): ${alert.alertType}${details}`,
       };
     case "close":
       return {
@@ -89,7 +132,8 @@ function buildNotification(event: AlertEvent, chainId: string): AlertNotificatio
         alertType: alert.alertType,
         alertId: alert.alertId,
         kind: "closed",
-        message: `[${chainId}] Alert closed: ${alert.alertType}`,
+        context,
+        message: `[${chainId}] Alert closed: ${alert.alertType}${details}`,
       };
   }
 }

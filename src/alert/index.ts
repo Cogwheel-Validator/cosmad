@@ -1,7 +1,12 @@
 import type { AlertConfig } from "@/config/alert_types";
 import type { BlockWindowStats } from "@/pkgs/database/analytics";
 import { Alert, type Block } from "@/pkgs/database/tables";
-import type { AlertEvent } from "./types";
+import type { AlertContext, AlertEvent } from "./types";
+
+function blockContext(block: Block | undefined): AlertContext {
+  if (block == null) return {};
+  return { latestBlockHeight: block.height.toString(), latestBlockTime: block.time };
+}
 
 type AlertConfigType = typeof AlertConfig.infer;
 
@@ -35,11 +40,12 @@ export class AlertEvaluator {
     caughtUp: boolean,
   ): AlertEvent[] {
     const openByType = new Map(openAlerts.map((a) => [a.alertType, a]));
+    const latestBlock = tailBlocks[tailBlocks.length - 1];
     return [
-      ...(caughtUp ? this.checkStalled(tailBlocks[tailBlocks.length - 1], openByType) : []),
+      ...(caughtUp ? this.checkStalled(latestBlock, openByType) : []),
       ...this.checkConsecutiveMiss(tailBlocks.slice(-consecutiveMissThreshold), openByType),
-      ...this.checkPercentageMiss(windowStats, openByType),
-      ...this.checkInactive(validatorActive, openByType),
+      ...this.checkPercentageMiss(windowStats, latestBlock, openByType),
+      ...this.checkInactive(latestBlock, validatorActive, openByType),
     ];
   }
 
@@ -58,6 +64,10 @@ export class AlertEvaluator {
     const isStalled =
       latestBlock == null ||
       Date.now() - latestBlock.time.getTime() > stalledAlert.stalledThreshold * 1000;
+    const context: AlertContext = {
+      ...blockContext(latestBlock),
+      threshold: stalledAlert.stalledThreshold,
+    };
 
     if (isStalled && existing == null) {
       return [
@@ -69,11 +79,12 @@ export class AlertEvaluator {
             alertType: "stalled",
             openedAt: new Date(),
           }),
+          context,
         },
       ];
     }
     if (!isStalled && existing != null) {
-      return [{ kind: "close", alert: existing, closedAt: new Date() }];
+      return [{ kind: "close", alert: existing, closedAt: new Date(), context }];
     }
     return [];
   }
@@ -97,6 +108,11 @@ export class AlertEvaluator {
       if (!recentBlocks[i]?.signed) missed++;
       else break;
     }
+    const context: AlertContext = {
+      ...blockContext(recentBlocks[recentBlocks.length - 1]),
+      consecutiveMissed: missed,
+      threshold: consecutiveMissAlert.threshold,
+    };
 
     const breached = missed >= consecutiveMissAlert.threshold;
     if (breached && existing == null) {
@@ -109,6 +125,7 @@ export class AlertEvaluator {
             alertType: "consecutive_miss",
             openedAt: new Date(),
           }),
+          context,
         },
       ];
     }
@@ -117,12 +134,12 @@ export class AlertEvaluator {
       const last = existing.lastNotifiedAt ?? existing.openedAt;
       const elapsedSec = (Date.now() - last.getTime()) / 1000;
       if (elapsedSec >= consecutiveMissAlert.repeatInterval) {
-        return [{ kind: "repeat", alert: existing }];
+        return [{ kind: "repeat", alert: existing, context }];
       }
       return [];
     }
     if (!breached && existing != null) {
-      return [{ kind: "close", alert: existing, closedAt: new Date() }];
+      return [{ kind: "close", alert: existing, closedAt: new Date(), context }];
     }
     return [];
   }
@@ -134,6 +151,7 @@ export class AlertEvaluator {
    */
   private checkPercentageMiss(
     windowStats: BlockWindowStats,
+    latestBlock: Block | undefined,
     openByType: Map<string, Alert>,
   ): AlertEvent[] {
     const { percentageMissedBlocksAlert } = this.cfg;
@@ -142,6 +160,13 @@ export class AlertEvaluator {
     const existing = openByType.get("percentage_miss");
     const ratio = (windowStats.missed / windowStats.total) * 100;
     const breached = ratio >= percentageMissedBlocksAlert.threshold;
+    const context: AlertContext = {
+      ...blockContext(latestBlock),
+      windowTotal: windowStats.total,
+      windowMissed: windowStats.missed,
+      windowMissedPercent: ratio,
+      threshold: percentageMissedBlocksAlert.threshold,
+    };
 
     if (breached && existing == null) {
       return [
@@ -153,6 +178,7 @@ export class AlertEvaluator {
             alertType: "percentage_miss",
             openedAt: new Date(),
           }),
+          context,
         },
       ];
     }
@@ -162,12 +188,12 @@ export class AlertEvaluator {
       const nextThreshold =
         percentageMissedBlocksAlert.threshold * 1.5 ** (existing.repeatCount + 1);
       if (ratio >= nextThreshold) {
-        return [{ kind: "repeat", alert: existing }];
+        return [{ kind: "repeat", alert: existing, context }];
       }
       return [];
     }
     if (!breached && existing != null) {
-      return [{ kind: "close", alert: existing, closedAt: new Date() }];
+      return [{ kind: "close", alert: existing, closedAt: new Date(), context }];
     }
     return [];
   }
@@ -178,10 +204,15 @@ export class AlertEvaluator {
    * @param openByType a map of currently open alerts for this chain, by alertType.
    * @returns an array of alert events, including any open or closed inactive alerts.
    */
-  private checkInactive(validatorActive: boolean, openByType: Map<string, Alert>): AlertEvent[] {
+  private checkInactive(
+    latestBlock: Block | undefined,
+    validatorActive: boolean,
+    openByType: Map<string, Alert>,
+  ): AlertEvent[] {
     if (!this.cfg.alertIfInactive) return [];
 
     const existing = openByType.get("inactive");
+    const context = blockContext(latestBlock);
     if (!validatorActive && existing == null) {
       return [
         {
@@ -192,11 +223,12 @@ export class AlertEvaluator {
             alertType: "inactive",
             openedAt: new Date(),
           }),
+          context,
         },
       ];
     }
     if (validatorActive && existing != null) {
-      return [{ kind: "close", alert: existing, closedAt: new Date() }];
+      return [{ kind: "close", alert: existing, closedAt: new Date(), context }];
     }
     return [];
   }

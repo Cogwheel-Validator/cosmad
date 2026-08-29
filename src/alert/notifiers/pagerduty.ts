@@ -23,6 +23,7 @@ export class PagerdutyNotifier implements Notifier {
           summary: notification.message,
           source: notification.chainId,
           severity: eventAction === "resolve" ? "info" : "critical",
+          custom_details: notification.context,
         },
       });
       return { ok: true, value: undefined };
