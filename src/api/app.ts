@@ -1,0 +1,61 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { streamSSE } from "hono/streaming";
+import { trimTrailingSlash } from "hono/trailing-slash";
+import type { ChainConfig } from "../config/app_config";
+import type { IApiReadDb } from "../pkgs/database/interfaces";
+import { alertsRouter } from "./routes/alerts";
+import { blocksRouter } from "./routes/blocks";
+import { overviewRouter } from "./routes/overview";
+import { statsRouter } from "./routes/stats";
+import { sseBus } from "./sse";
+import type { SseEvent } from "./types";
+import { startWatcher } from "./watcher";
+
+export async function createApp(databases: Map<string, IApiReadDb>, chains: ChainConfig[]) {
+  await startWatcher(databases);
+  const app = new Hono();
+  const supportedChains = [...databases.keys()];
+
+  // set up middleware
+  app.use("/api/*", cors());
+  app.use(trimTrailingSlash());
+
+  app.get("/api/chains", (c) => c.json({ chains: supportedChains }));
+  app.route("/api/chains", blocksRouter(databases));
+  app.route("/api/chains", alertsRouter(databases));
+  app.route("/api/chains", statsRouter(databases));
+  app.route("/api", overviewRouter(databases, chains));
+
+  app.get("/events", (c) => {
+    return streamSSE(c, async (stream) => {
+      let closed = false;
+
+      const handler = (event: SseEvent) => {
+        if (closed) return;
+        stream.writeSSE({ event: event.type, data: JSON.stringify(event) }).catch(() => {
+          closed = true;
+        });
+      };
+
+      sseBus.on("event", handler);
+
+      stream.onAbort(() => {
+        closed = true;
+        sseBus.off("event", handler);
+      });
+
+      while (!closed) {
+        await stream.sleep(15_000);
+        if (closed) break;
+        await stream.writeSSE({ event: "ping", data: String(Date.now()) }).catch(() => {
+          closed = true;
+        });
+      }
+
+      sseBus.off("event", handler);
+    });
+  });
+
+  return app;
+}
