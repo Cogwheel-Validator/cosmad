@@ -46,15 +46,24 @@ async function main() {
     stopFns.push(startHealthCheck(config.globalAlerts.healthCheck));
   }
 
-  for (const chain of config.chains) {
-    const db = connection.forChain(chain.chainId, chain.chainType);
-    try {
-      const stop = await runChainWorker(chain, db, config.globalAlerts);
-      stopFns.push(stop);
-    } catch (err) {
-      // One chain's startup failing (e.g. its RPCs are all down right now) shouldn't block the
-      // other chains from starting.
-      log.error("Failed to start chain worker for %s, skipping: %s", chain.chainId, err);
+  const results = await Promise.allSettled(
+    config.chains.map((chain) => {
+      const db = connection.forChain(chain.chainId, chain.chainType);
+      return runChainWorker(chain, db, config.globalAlerts);
+    }),
+  );
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === "fulfilled") {
+      stopFns.push(result.value);
+    } else {
+      // TODO: add a retry mechanism that would later try to run it again
+      // and alert if it is still down
+      log.error(
+        "Failed to start chain worker for %s, skipping: %s",
+        config.chains[i].chainId,
+        result.reason,
+      );
     }
   }
 
