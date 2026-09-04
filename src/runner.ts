@@ -20,12 +20,19 @@ const log = logger.child({ module: "Runner" });
 const ext = __filename.endsWith(".ts") ? "ts" : "js";
 
 const READY_TIMEOUT_MS = 30_000;
+// The engine can spend a long time replaying an uncheckpointed DuckDB WAL on
+// startup. It will use extended timeout.
+const ENGINE_READY_TIMEOUT_MS = 300_000;
 
-function waitForReady(child: ChildProcess, name: string): Promise<void> {
+function waitForReady(
+  child: ChildProcess,
+  name: string,
+  timeoutMs: number = READY_TIMEOUT_MS,
+): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     const timeout = setTimeout(
-      () => reject(new Error(`${name} did not report ready within ${READY_TIMEOUT_MS}ms`)),
-      READY_TIMEOUT_MS,
+      () => reject(new Error(`${name} did not report ready within ${timeoutMs}ms`)),
+      timeoutMs,
     );
     child.once("message", (msg: unknown) => {
       if (typeof msg === "object" && msg !== null && (msg as { type?: unknown }).type === "ready") {
@@ -76,7 +83,7 @@ async function main() {
 
   try {
     const engine = spawn(`engine/main.${ext}`, "engine");
-    await waitForReady(engine, "engine");
+    await waitForReady(engine, "engine", ENGINE_READY_TIMEOUT_MS);
     log.info("engine ready");
 
     const ingestion = spawn(`dp/main.${ext}`, "ingestion");

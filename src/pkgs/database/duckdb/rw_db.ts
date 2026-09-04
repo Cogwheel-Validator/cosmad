@@ -48,8 +48,12 @@ export class RWDB {
       max_temp_directory_size: options.maxTempDirectorySize ?? "4GB",
     };
 
+    const log = logger.child({ module: "RWDB" });
+    log.info("Opening database at %s (may take a while if replaying WAL entries)", dbDir);
+    const openStartedAt = Date.now();
     const instance = await DuckDBInstance.create(`${dbDir}/cosmad.duckdb`, dbOptions);
     const conn = await instance.connect();
+    log.info("Database opened in %dms", Date.now() - openStartedAt);
 
     const rwdb = new RWDB(conn);
     rwdb.log.info("Database connection established successfully");
