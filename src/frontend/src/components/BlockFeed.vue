@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue";
+import { onUnmounted, ref, watch } from "vue";
 import type { BlockJson, SseEvent } from "../types";
 
 function formatTime(iso: string): string {
@@ -8,6 +8,26 @@ function formatTime(iso: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+// -1 = not in active set, 0 = active but missed, 1 = active and signed.
+function signedClass(signed: number): string {
+  if (signed === 1) return "text-success font-bold";
+  if (signed === 0) return "text-error font-bold";
+  return "text-base-content/60 font-bold";
+}
+
+function signedLabel(signed: number): string {
+  if (signed === 1) return "✓";
+  if (signed === 0) return "✗";
+  return "·";
+}
+
+function dotClass(status: string): string {
+  if (status === "online") return "bg-success shadow-[0_0_0_3px_rgba(74,222,128,0.2)]";
+  if (status === "offline") return "bg-error";
+  if (status === "stalled") return "bg-warning shadow-[0_0_0_3px_rgba(234,179,8,0.2)]";
+  return "bg-base-300";
 }
 
 const MAX_BLOCKS = 50;
@@ -75,115 +95,43 @@ onUnmounted(() => es?.close());
 </script>
 
 <template>
-  <section class="feed">
-    <div class="feed-header">
-      <span class="feed-title">Block Feed</span>
-      <span class="status-dot" :class="`dot-${status}`" :title="status" />
+  <section class="flex flex-col lg:min-h-[calc(100vh-4rem)]">
+    <div class="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-base-300">
+      <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60">Block Feed</span>
+      <span class="w-2 h-2 rounded-full shrink-0" :class="dotClass(status)" :title="status" />
     </div>
 
-    <div v-if="loading" class="state">Loading…</div>
-    <div v-else-if="error" class="state state-error">{{ error }}</div>
-    <div v-else-if="blocks.length === 0" class="state">Waiting for blocks…</div>
+    <div v-if="loading" class="text-center text-sm text-base-content/60 py-8">Loading…</div>
+    <div v-else-if="error" class="alert alert-error m-3">{{ error }}</div>
+    <div v-else-if="blocks.length === 0" class="text-center text-sm text-base-content/60 py-8">
+      Waiting for blocks…
+    </div>
 
-    <div v-else class="table-wrap">
-      <table>
+    <div v-else class="overflow-x-auto">
+      <table class="table table-sm">
         <thead>
-          <tr>
-            <th>Height</th>
-            <th>Time</th>
-            <th>Signed</th>
-            <th>Hash</th>
+          <tr class="top-16 bg-base-200 z-10">
+            <th class="text-xs uppercase tracking-wide text-base-content/60">Height</th>
+            <th class="text-xs uppercase tracking-wide text-base-content/60">Time</th>
+            <th class="text-xs uppercase tracking-wide text-base-content/60">Signed</th>
+            <th class="text-xs uppercase tracking-wide text-base-content/60">Hash</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="block in blocks" :key="block.height" class="block-row">
-            <td class="mono">{{ block.height }}</td>
-            <td class="muted">{{ formatTime(block.time) }}</td>
+          <tr v-for="block in blocks" :key="block.height" class="hover:bg-base-200/50">
+            <td class="font-mono">{{ block.height }}</td>
+            <td class="text-base-content/60">{{ formatTime(block.time) }}</td>
             <td>
-              <span :class="block.signed ? 'signed' : 'unsigned'">
-                {{ block.signed ? "✓" : "✗" }}
+              <span :class="signedClass(block.signed)">
+                {{ signedLabel(block.signed) }}
               </span>
             </td>
-            <td class="mono muted truncate">{{ block.hash.slice(0, 16) }}…</td>
+            <td class="font-mono text-base-content/60 max-w-35 overflow-hidden text-ellipsis whitespace-nowrap">
+              {{ block.hash.slice(0, 16) }}…
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
 </template>
-
-<style scoped>
-.feed {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 52px);
-}
-
-.feed-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.feed-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot-online { background: var(--green); box-shadow: 0 0 0 3px rgba(63,185,80,.2); }
-.dot-offline { background: var(--red); }
-.dot-unknown { background: var(--text-muted); }
-
-.state {
-  padding: 32px 20px;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-.state-error { color: var(--red); }
-
-.table-wrap { overflow-x: auto; }
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-th {
-  text-align: left;
-  padding: 8px 20px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  position: sticky;
-  top: 52px;
-}
-
-td { padding: 8px 20px; border-bottom: 1px solid var(--border); }
-
-.block-row:hover td { background: rgba(255,255,255,0.02); }
-.block-row:first-child td { color: var(--text); }
-
-.mono { font-family: var(--font-mono); }
-.muted { color: var(--text-muted); }
-.truncate { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.signed { color: var(--green); font-weight: 700; }
-.unsigned { color: var(--red); font-weight: 700; }
-</style>

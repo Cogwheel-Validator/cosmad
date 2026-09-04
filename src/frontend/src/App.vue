@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import BlockFeed from "./components/BlockFeed.vue";
-import AlertList from "./components/AlertList.vue";
+import { onMounted, ref } from "vue";
+import Github from "/github.svg?raw";
+import MenuIcon from "/menu.svg?raw";
+import StatsIcon from "/stats.svg?raw";
+import { fetchJson } from "./api";
+import InlineSvg from "./components/InlineSvg.vue";
+
+// Nav links live here so adding a future page (e.g. an "Alerts" overview) is a one-line change.
+const navLinks = [{ to: "/", label: "Dashboard", icon: StatsIcon }];
 
 const chains = ref<string[]>([]);
-const selectedChain = ref<string | null>(null);
 const loading = ref(true);
 
 onMounted(async () => {
   try {
-    const res = await fetch("/api/chains");
-    const data = (await res.json()) as { chains: string[] };
+    const data = await fetchJson<{ chains: string[] }>("/api/chains");
     chains.value = data.chains ?? [];
-    if (chains.value.length > 0) {
-      selectedChain.value = chains.value[0] ?? null;
-    }
   } finally {
     loading.value = false;
   }
@@ -22,102 +23,54 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="layout">
-    <header class="header">
-      <span class="logo">⬡ cosmad</span>
-      <nav v-if="chains.length > 0" class="chain-nav">
-        <button
-          v-for="chain in chains"
-          :key="chain"
-          :class="['chain-btn', { active: selectedChain === chain }]"
-          @click="selectedChain = chain"
-        >
-          {{ chain }}
-        </button>
-      </nav>
-    </header>
-
-    <main class="main">
-      <div v-if="loading" class="empty">Loading…</div>
-
-      <div v-else-if="chains.length === 0" class="empty">
-        No chains configured. Add entries to <code>config.chains</code> in
-        <code>src/runner.ts</code>.
+  <div class="min-h-screen flex flex-col">
+    <div class="navbar bg-base-200 border-b border-base-300 sticky top-0 z-20 px-2! sm:px-3! md:px-4!">
+      <div class="navbar-start">
+        <div class="dropdown" v-if="navLinks.length > 1">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-md btn-square lg:hidden" aria-label="Open menu">
+            <InlineSvg :src="MenuIcon" class="h-6 w-6 text-base-content" />
+          </div>
+          <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-200 rounded-box z-30 mt-3 w-48 shadow border border-base-300">
+            <li v-for="link in navLinks" :key="link.to">
+              <RouterLink :to="link.to" exact-active-class="active"><InlineSvg :src="link.icon" class="h-6 w-6" />{{ link.label }}</RouterLink>
+            </li>
+          </ul>
+        </div>
+        <RouterLink to="/" class="btn btn-ghost text-lg">
+          <span class="text-primary">⬡</span> cosmad
+        </RouterLink>
       </div>
 
-      <template v-else-if="selectedChain">
-        <AlertList :chain-id="selectedChain" />
-        <BlockFeed :chain-id="selectedChain" />
-      </template>
+      <div class="navbar-center hidden lg:flex">
+        <ul class="menu menu-horizontal px-1 space-x-4">
+          <li v-for="link in navLinks" :key="link.to">
+            <RouterLink :to="link.to" class="btn btn-soft btn-primary btn-md p-4 " exact-active-class="active">
+              <InlineSvg :src="link.icon" class="h-6 w-6" />
+              {{ link.label }}</RouterLink>
+          </li>
+        </ul>
+      </div>
+
+      <div class="navbar-end">
+        <a href="https://github.com/Cogwheel-Validator/cosmad" target="_blank" class="btn btn-outline btn-primary btn-sm">
+          <InlineSvg :src="Github" class="h-6 w-6" />
+        </a>
+      </div>
+    </div>
+
+    <main class="flex-1 flex flex-col items-stretch w-full">
+      <div v-if="loading" class="flex justify-center items-center py-24">
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+      </div>
+
+      <div v-else-if="chains.length === 0" class="alert alert-info max-w-md mx-auto mt-16">
+        <span>
+          No chains configured. Add entries to <code class="font-mono">config.chains</code> in
+          <code class="font-mono">src/runner.ts</code>.
+        </span>
+      </div>
+
+      <RouterView v-else />
     </main>
   </div>
 </template>
-
-<style scoped>
-.layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 0 24px;
-  height: 52px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.logo {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--accent);
-  letter-spacing: 0.02em;
-}
-
-.chain-nav {
-  display: flex;
-  gap: 4px;
-}
-
-.chain-btn {
-  padding: 4px 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.15s;
-}
-
-.chain-btn:hover { color: var(--text); border-color: var(--text-muted); }
-.chain-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(88, 166, 255, 0.08); }
-
-.main {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 0;
-  align-items: start;
-}
-
-.empty {
-  grid-column: 1 / -1;
-  padding: 64px 24px;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.empty code {
-  font-family: var(--font-mono);
-  background: var(--surface);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-</style>
