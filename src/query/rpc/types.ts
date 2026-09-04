@@ -51,10 +51,19 @@ const CosmosCommitSigners = type({
   .or("null")
   .array();
 
+// A precommit block id for TM2
+const PrecommitBlockId = type({
+  hash: "string | null",
+  parts: {
+    total: "number | string.numeric.parse",
+    hash: "string | null",
+  },
+});
+
 const Tm2Precommits = type({
   type: "0 <= number <= 3",
   height: "string.integer.parse",
-  blockId: BlockId,
+  blockId: PrecommitBlockId,
   timestamp: "string.date.iso",
   validatorAddress: "string.alphanumeric",
   signature: "string.base64 == 88| null",
