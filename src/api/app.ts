@@ -1,7 +1,9 @@
+import { Scalar } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { trimTrailingSlash } from "hono/trailing-slash";
+import { openAPIRouteHandler } from "hono-openapi";
 import type { ChainConfig } from "../config/app_config";
 import type { IApiReadDb } from "../pkgs/database/interfaces";
 import { alertsRouter } from "./routes/alerts";
@@ -26,6 +28,16 @@ export async function createApp(databases: Map<string, IApiReadDb>, chains: Chai
   app.route("/api/chains", alertsRouter(databases));
   app.route("/api/chains", statsRouter(databases));
   app.route("/api", overviewRouter(databases, chains));
+
+  app.get(
+    "/api/openapi.json",
+    openAPIRouteHandler(app, {
+      documentation: {
+        info: { title: "cosmad API", version: "1.0.0" },
+      },
+    }),
+  );
+  app.get("/api/reference", Scalar({ url: "/api/openapi.json" }));
 
   app.get("/events", (c) => {
     return streamSSE(c, async (stream) => {

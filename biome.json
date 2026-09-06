@@ -22,7 +22,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "useExhaustiveDependencies": "warn",
         "noUnusedVariables": "warn"
@@ -56,11 +56,10 @@
     }
   },
   "assist": {
+    "includes": ["src/**/*.ts", "src/**/*.vue"],
     "enabled": true,
     "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
+      "recommended": true
     }
   }
 }

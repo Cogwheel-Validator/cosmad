@@ -1,10 +1,11 @@
+import { type } from "arktype";
 import { Hono } from "hono";
+import { describeRoute, resolver, validator } from "hono-openapi";
 import type { ChainConfig } from "../../config/app_config";
 import type { DailyBlockStats } from "../../pkgs/database/analytics";
 import type { IApiReadDb } from "../../pkgs/database/interfaces";
 import type { ChainOverviewJson, ChainStatus, OverviewJson } from "../types";
 import { serializeDailyStats } from "../types";
-import { validDays } from "./validation";
 
 const DEFAULT_STALLED_MULTIPLIER = 5;
 
@@ -52,6 +53,41 @@ function combineDaily(perChainDaily: DailyBlockStats[][]): DailyBlockStats[] {
     .map(([date, { total, missed }]) => ({ date, total, missed }));
 }
 
+const MIN_DAYS = 1;
+const MAX_DAYS = 365;
+const DEFAULT_DAYS = 30;
+
+const daysQuery = type({
+  days: type("string.integer.parse").pipe((q) =>
+    q >= MIN_DAYS && q <= MAX_DAYS ? q : DEFAULT_DAYS,
+  ),
+});
+const overviewSchema = type({
+  days: "number",
+  chains: type({
+    chainId: "string",
+    prettyName: "string",
+    chainLogo: "string | null",
+    status: "'stalled' | 'online'",
+    latestHeight: "string.numeric",
+    latestBlockTime: "string.date",
+    totalBlocks: "number",
+    missedBlocks: "number",
+    percentMissed: "number | null",
+  }).array(),
+  combined: type({
+    totalBlocks: "number",
+    missedBlocks: "number",
+    percentSigned: "number | null",
+    daily: type({
+      date: "string.date",
+      total: "number",
+      missed: "number",
+      percentSigned: "number | null",
+    }).array(),
+  }),
+});
+
 /**
  * overviewRouter creates a Hono router with an overview endpoint that returns the combined daily block stats for all chains
  * @param databases map of chain IDs to database connections
@@ -62,58 +98,76 @@ export function overviewRouter(databases: Map<string, IApiReadDb>, chainCfgs: Ch
   const router = new Hono();
   const chainsById = new Map(chainCfgs.map((c) => [c.chainId, c]));
 
-  router.get("/overview", async (c) => {
-    const days = validDays(c.req.query("days"));
-
-    const chainResults: ChainOverviewJson[] = [];
-    const perChainDaily: DailyBlockStats[][] = [];
-
-    for (const [chainId, db] of databases) {
-      const chain = chainsById.get(chainId);
-      if (!chain) continue;
-
-      const [latestResult, dailyResult] = await Promise.all([
-        db.latestBlock(),
-        db.getDailySignedStats(days),
-      ]);
-
-      const latestBlock = latestResult.ok ? latestResult.value : null;
-      const daily = dailyResult.ok ? dailyResult.value : [];
-      perChainDaily.push(daily);
-
-      const totalBlocks = daily.reduce((sum, d) => sum + d.total, 0);
-      const missedBlocks = daily.reduce((sum, d) => sum + d.missed, 0);
-
-      chainResults.push({
-        chainId,
-        prettyName: chain.prettyName,
-        chainLogo: chain.chainLogo ?? null,
-        status: chainStatus(chain, latestBlock?.time ?? null),
-        latestHeight: latestBlock ? latestBlock.height.toString() : null,
-        latestBlockTime: latestBlock ? latestBlock.time.toISOString() : null,
-        totalBlocks,
-        missedBlocks,
-        percentageSigned: percentageSigned(totalBlocks, missedBlocks),
-      });
-    }
-
-    const combined = combineDaily(perChainDaily);
-    const combinedTotal = combined.reduce((sum, d) => sum + d.total, 0);
-    const combinedMissed = combined.reduce((sum, d) => sum + d.missed, 0);
-
-    const response: OverviewJson = {
-      days,
-      chains: chainResults,
-      combined: {
-        totalBlocks: combinedTotal,
-        missedBlocks: combinedMissed,
-        percentageSigned: percentageSigned(combinedTotal, combinedMissed),
-        daily: combined.map(serializeDailyStats),
+  router.get(
+    "/overview",
+    describeRoute({
+      summary: "Overview of all chains",
+      tags: ["Overview"],
+      responses: {
+        200: {
+          description: "Returns the combined daily block stats for all chains",
+          content: {
+            "application/json": {
+              schema: resolver(overviewSchema),
+            },
+          },
+        },
       },
-    };
+    }),
+    validator("query", daysQuery),
+    async (c) => {
+      const days = c.req.valid("query").days;
 
-    return c.json(response);
-  });
+      const chainResults: ChainOverviewJson[] = [];
+      const perChainDaily: DailyBlockStats[][] = [];
+
+      for (const [chainId, db] of databases) {
+        const chain = chainsById.get(chainId);
+        if (!chain) continue;
+
+        const [latestResult, dailyResult] = await Promise.all([
+          db.latestBlock(),
+          db.getDailySignedStats(days),
+        ]);
+
+        const latestBlock = latestResult.ok ? latestResult.value : null;
+        const daily = dailyResult.ok ? dailyResult.value : [];
+        perChainDaily.push(daily);
+
+        const totalBlocks = daily.reduce((sum, d) => sum + d.total, 0);
+        const missedBlocks = daily.reduce((sum, d) => sum + d.missed, 0);
+
+        chainResults.push({
+          chainId,
+          prettyName: chain.prettyName,
+          chainLogo: chain.chainLogo ?? null,
+          status: chainStatus(chain, latestBlock?.time ?? null),
+          latestHeight: latestBlock ? latestBlock.height.toString() : null,
+          latestBlockTime: latestBlock ? latestBlock.time.toISOString() : null,
+          totalBlocks,
+          missedBlocks,
+          percentageSigned: percentageSigned(totalBlocks, missedBlocks),
+        });
+      }
+
+      const combined = combineDaily(perChainDaily);
+      const combinedTotal = combined.reduce((sum, d) => sum + d.total, 0);
+      const combinedMissed = combined.reduce((sum, d) => sum + d.missed, 0);
+
+      const response: OverviewJson = {
+        days,
+        chains: chainResults,
+        combined: {
+          totalBlocks: combinedTotal,
+          missedBlocks: combinedMissed,
+          percentageSigned: percentageSigned(combinedTotal, combinedMissed),
+          daily: combined.map(serializeDailyStats),
+        },
+      };
+
+      return c.json(response);
+    },
+  );
 
   return router;
 }

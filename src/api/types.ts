@@ -25,9 +25,11 @@ export type SseEvent =
   | { type: "ping" };
 
 export function serializeBlock(block: Block): BlockJson {
+  const hash =
+    block.chainType === "bft" ? block.hash.toString("hex") : block.hash.toString("base64");
   return {
     height: block.height.toString(),
-    hash: block.hash.toString("hex"),
+    hash,
     time: block.time.toISOString(),
     signed: block.signed,
     signature: block.signature?.toString("hex") ?? null,
