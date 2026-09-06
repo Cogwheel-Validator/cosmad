@@ -6,37 +6,43 @@ import type { BlockCommitResponse } from "@/query/rpc/types";
 import { commitToBlock } from "../chain_worker";
 
 const VALCONS_HEX = "8A948A32DC693745146C2CD913815B166675809B";
-const VALOPER_ADDRESS = "cosmosvaloper1test";
-const VALCONS_ADDRESS = "cosmosvalcons1placeholder";
+// Shared across both chain types' fixtures.
+const OPERATOR_ADDRESS = "cosmosvaloper1test";
+const SIGNER_ADDRESS = "cosmosvalcons1placeholder";
 const FAKE_SIGNATURE =
   "VNMOnZJIFUcZmmBSdfewTpsdAnviEL4PMcc9qaiI/z1XdP2XR4ENAoD+L4hg1FmtzlLnBWoujeJ/bwKrp5+CBw==";
 
 const chainLog = logger.child({ module: "test" });
+
+const SHARED_ALERT_CONFIG = {
+  alertIfInactive: false,
+  signingWindowSize: 10,
+  stalledAlert: { enabled: false, stalledThreshold: 60 },
+  consecutiveMissAlert: { enabled: false, threshold: 3, repeat: false, repeatInterval: 0 },
+  percentageMissedBlocksAlert: { enabled: false, threshold: 50, repeat: false },
+};
 
 function bftChain(): ChainConfig {
   return {
     chainId: "test-bft",
     prettyName: "Test BFT",
     chainType: "bft",
-    valoperAddress: VALOPER_ADDRESS,
-    valconsAddress: VALCONS_ADDRESS,
+    valoperAddress: OPERATOR_ADDRESS,
+    valconsAddress: SIGNER_ADDRESS,
     rpcUrls: [{ url: "https://rpc.test", alertIfDown: true }],
-    alertConfig: {
-      alertIfInactive: false,
-      signingWindowSize: 10,
-      stalledAlert: { enabled: false, stalledThreshold: 60 },
-      consecutiveMissAlert: { enabled: false, threshold: 3, repeat: false, repeatInterval: 0 },
-      percentageMissedBlocksAlert: { enabled: false, threshold: 50, repeat: false },
-    },
+    alertConfig: SHARED_ALERT_CONFIG,
   };
 }
 
 function tm2Chain(): ChainConfig {
-  const { ...rest } = bftChain();
   return {
-    ...rest,
     chainId: "test-tm2",
+    prettyName: "Test TM2",
     chainType: "tm2",
+    operatorAddress: OPERATOR_ADDRESS,
+    signingAddress: SIGNER_ADDRESS,
+    rpcUrls: [{ url: "https://rpc.test", alertIfDown: true }],
+    alertConfig: SHARED_ALERT_CONFIG,
   };
 }
 
@@ -196,7 +202,7 @@ describe("commitToBlock - bft: no signature entry, disambiguated via active-set 
       chainLog,
     );
     expect(block.signed).toBe(0);
-    expect(getValidatorData).toHaveBeenCalledWith(VALOPER_ADDRESS, 42);
+    expect(getValidatorData).toHaveBeenCalledWith(OPERATOR_ADDRESS, 42);
   });
 
   test("not in cached active set, fallback validator lookup reports jailed -> signed = -1", async () => {
@@ -265,7 +271,7 @@ describe("commitToBlock - bft: no signature entry, disambiguated via active-set 
 
 describe("commitToBlock - tm2, no active-set option, never calls the query", () => {
   test("matching precommit with type=2 -> signed = 1", async () => {
-    const commit = tm2Commit(VALCONS_ADDRESS, 2);
+    const commit = tm2Commit(SIGNER_ADDRESS, 2);
     const block = await commitToBlock(
       commit,
       tm2Chain(),

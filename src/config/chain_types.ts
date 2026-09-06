@@ -6,12 +6,9 @@ export const Apis = type({
   alertIfDown: "boolean",
 });
 
-export const ChainConfig = type({
+const ChainConfigBase = type({
   prettyName: "string",
-  chainType: "'bft' | 'tm2'",
   "chainLogo?": "string",
-  valoperAddress: "string",
-  "valconsAddress?": "string", // only available for bft chains, leave undefined for tm2 chains
   rpcUrls: Apis.array(),
   "apiUrls?": Apis.array(), // only available for bft chains, leave undefined for tm2 chains
   /** How often to poll the RPC endpoint (ms). Defaults to 6 000. */
@@ -32,7 +29,7 @@ export const ChainConfig = type({
   // it every subsequent poll.
   //
   // If for some unforeseen reason a commit fetch permanently fails, set this to true to instead
-  // skip the failed height and continue past it, accepting a permanent gap — only useful in rare
+  // skip the failed height and continue past it, accepting a permanent gap - only useful in rare
   // cases where a specific block is known to be permanently unfetchable (e.g. pruned by all configured RPCs)
   // and you'd rather not have that one height block all further ingestion. Defaults to false.
   // And also only enable it until you skip over the troublesome commit.
@@ -40,4 +37,17 @@ export const ChainConfig = type({
   alertConfig: AlertConfig,
 });
 
+const BftChainConfig = ChainConfigBase.and({
+  chainType: "'bft'",
+  valoperAddress: "string",
+  valconsAddress: "string",
+});
+
+const Tm2ChainConfig = ChainConfigBase.and({
+  chainType: "'tm2'",
+  operatorAddress: "string",
+  signingAddress: "string",
+});
+
+export const ChainConfig = BftChainConfig.or(Tm2ChainConfig);
 export type ChainConfigType = typeof ChainConfig.infer;

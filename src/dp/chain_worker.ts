@@ -19,6 +19,16 @@ const DEFAULT_SIGNING_WINDOW_SIZE = 10_000;
 // Used when a chain has no configured maxBlocksPerPoll.
 const DEFAULT_MAX_BLOCKS_PER_POLL = 100;
 
+// Returns the validator's operator account: valoper (bft) or operator (tm2).
+function operatorAddress(chain: ChainConfig): string {
+  return chain.chainType === "bft" ? chain.valoperAddress : chain.operatorAddress;
+}
+
+// Returns the signing address: valcons (bft) or signing (tm2) address.
+function signerAddress(chain: ChainConfig): string {
+  return chain.chainType === "bft" ? chain.valconsAddress : chain.signingAddress;
+}
+
 /**
  * Resolves the signing window size once at worker startup not re-fetched every poll, since
  * signed_blocks_window changes rarely (only via a governance param change). An explicit
@@ -96,7 +106,7 @@ async function resolveActiveFallback(
   chainLog: Logger,
 ): Promise<boolean> {
   if (cache.value !== undefined) return cache.value;
-  const valData = await query.getValidatorData(chain.valoperAddress, height);
+  const valData = await query.getValidatorData(operatorAddress(chain), height);
   if (valData.ok) {
     const { jailed, status } = valData.data.validator;
     cache.value = !jailed && status === "BOND_STATUS_BONDED";
@@ -154,8 +164,10 @@ export async function commitToBlock(
       signed = active ? 0 : -1;
     }
   } else if ("precommits" in commitData && commitData.precommits != null) {
-    // TM2 path - identify validator by operator address, no active-set option
-    const addr = chain.valoperAddress;
+    // TM2 path - precommits identify validators by signing address, not operator address.
+    // Some older tm2 chains (e.g. early Gnoland) happened to use the same value for both, which
+    // is coincidence, not a guarantee - don't rely on it holding elsewhere.
+    const addr = signerAddress(chain);
     const pre = commitData.precommits.find((p) => p != null && p.validatorAddress === addr);
     signed = pre != null && pre.type === 2 ? 1 : 0;
     if (signed === 1 && pre?.signature != null) signature = pre.signature;
@@ -236,9 +248,7 @@ export async function doPoll(
         // past a gap. The DB stays contiguous, and this exact height gets retried (and logged
         // again) on every subsequent poll until it succeeds or allowBlockGaps is set.
         chainLog.warn(
-          "Failed to fetch commit at height %d, stopping this poll's ingestion here - will retry: %s",
-          heights[i],
-          result.error,
+          `Failed to fetch commit at height ${heights[i]}, stopping this poll's ingestion here - will retry: ${result.error}`,
         );
         break;
       }
@@ -291,7 +301,7 @@ export async function doPoll(
   }
 
   // Evaluate alert conditions against the freshly ingested blocks
-  const openAlertsResult = await db.getUnclosedAlerts();
+  const openAlertsResult = await db.getUnclosedAlerts(500, 1); // probably an overkill
   if (!openAlertsResult.ok) {
     chainLog.error("Failed to read open alerts: %s", openAlertsResult.error);
     return;
@@ -300,7 +310,7 @@ export async function doPoll(
   // Determine validator active status (BFT only via REST API)
   let validatorActive = true;
   if (chain.chainType === "bft") {
-    const valData = await query.getValidatorData(chain.valoperAddress);
+    const valData = await query.getValidatorData(operatorAddress(chain));
     if (valData.ok) {
       const { jailed, status } = valData.data.validator;
       validatorActive = !jailed && status === "BOND_STATUS_BONDED";
@@ -394,10 +404,11 @@ export async function runChainWorker(
       ? bech32ValconsToHex(chain.valconsAddress)
       : undefined;
 
-  const signingWindowSize = await resolveSigningWindowSize(chain, query, chainLog);
+  const [signingWindowSize, startupHeight] = await Promise.all([
+    resolveSigningWindowSize(chain, query, chainLog),
+    query.getLatestCommit(),
+  ]);
 
-  // Fetched once at startup
-  const startupHeight = await query.getLatestCommit();
   const activeSetHex = startupHeight.ok
     ? await fetchActiveSetHex(
         chain,

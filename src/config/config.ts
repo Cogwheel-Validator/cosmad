@@ -131,6 +131,12 @@ function validateChainConfig(chainId: string, config: ChainConfigType): null | G
     return new GeneralLoaderError(error);
   }
 
+  if (config.chainType === "tm2" && !config.signingAddress) {
+    const error = `Chain config is missing signingAddress: ${chainId}`;
+    log.error(error);
+    return new GeneralLoaderError(error);
+  }
+
   if (config.chainType === "bft" && (!config.apiUrls || config.apiUrls.length === 0)) {
     const error = `Chain config is missing apiUrls (required for bft chains): ${chainId}`;
     log.error(error);

@@ -1,6 +1,7 @@
 pretty_name = "Gnoland"
 chain_type = "tm2"
-valoper_address = "g1"
+operator_address = "g1"
+signing_address = "g1"
 rpc_urls = [
   { url = "https://rpc.gno.land", alert_if_down = true }
 ]
