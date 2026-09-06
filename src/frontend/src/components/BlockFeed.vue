@@ -45,7 +45,7 @@ async function fetchLatest() {
   loading.value = true;
   error.value = null;
   try {
-    const res = await fetch(`/api/chains/${props.chainId}/blocks/latest`);
+    const res = await fetch(`/api/v1/chains/${props.chainId}/blocks/latest`);
     const data = (await res.json()) as { block: BlockJson | null };
     if (data.block) {
       blocks.value = [data.block];
@@ -59,7 +59,7 @@ async function fetchLatest() {
 
 function connectSse() {
   es?.close();
-  es = new EventSource("/events");
+  es = new EventSource("/api/v1/events");
 
   es.addEventListener("block", (e) => {
     const event = JSON.parse(e.data) as SseEvent & { type: "block" };

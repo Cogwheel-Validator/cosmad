@@ -17,7 +17,7 @@ const {
   dataUpdatedAt,
 } = useQuery({
   queryKey: ["overview", DAYS],
-  queryFn: () => fetchJson<OverviewJson>(`/api/overview?days=${DAYS}`),
+  queryFn: () => fetchJson<OverviewJson>(`/api/v1/overview?days=${DAYS}`),
   refetchInterval: REFRESH_INTERVAL_MS,
 });
 

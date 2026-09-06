@@ -14,7 +14,7 @@ const loading = ref(true);
 
 onMounted(async () => {
   try {
-    const data = await fetchJson<{ chains: string[] }>("/api/chains");
+    const data = await fetchJson<{ chains: string[] }>("/api/v1/chains");
     chains.value = data.chains ?? [];
   } finally {
     loading.value = false;

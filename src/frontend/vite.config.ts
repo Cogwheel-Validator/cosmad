@@ -11,10 +11,6 @@ export default defineConfig({
     // mode on the same port as Hono so no proxy is needed.
     proxy: {
       "/api": "http://localhost:3000",
-      "/events": {
-        target: "http://localhost:3000",
-        changeOrigin: false,
-      },
     },
   },
   build: {

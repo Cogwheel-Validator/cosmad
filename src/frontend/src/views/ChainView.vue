@@ -24,7 +24,7 @@ const {
   dataUpdatedAt,
 } = useQuery({
   queryKey: computed(() => ["chainStats", props.chainId, DAYS] as const),
-  queryFn: () => fetchJson<ChainStatsJson>(`/api/chains/${props.chainId}/stats?days=${DAYS}`),
+  queryFn: () => fetchJson<ChainStatsJson>(`/api/v1/chains/${props.chainId}/stats?days=${DAYS}`),
   refetchInterval: REFRESH_INTERVAL_MS,
 });
 

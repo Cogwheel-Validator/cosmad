@@ -24,7 +24,7 @@ async function fetchAlerts() {
   loading.value = true;
   error.value = null;
   try {
-    const res = await fetch(`/api/chains/${props.chainId}/alerts`);
+    const res = await fetch(`/api/v1/chains/${props.chainId}/alerts`);
     const data = (await res.json()) as { alerts: AlertJson[] };
     alerts.value = data.alerts ?? [];
   } catch (e) {
@@ -36,7 +36,7 @@ async function fetchAlerts() {
 
 function connectSse() {
   es?.close();
-  es = new EventSource("/events");
+  es = new EventSource("/api/v1/events");
 
   es.addEventListener("alert_opened", (e) => {
     const event = JSON.parse(e.data) as SseEvent & { type: "alert_opened" };

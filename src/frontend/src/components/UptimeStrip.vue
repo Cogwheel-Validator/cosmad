@@ -36,7 +36,7 @@ async function load() {
   error.value = null;
   try {
     const data = await fetchJson<{ blocks: BlockJson[] }>(
-      `/api/chains/${props.chainId}/blocks/recent?limit=${props.limit}`,
+      `/api/v1/chains/${props.chainId}/blocks/recent?limit=${props.limit}`,
     );
     blocks.value = data.blocks;
   } catch (e) {

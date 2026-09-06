@@ -14,7 +14,7 @@ class SseHub {
 
   private connect() {
     if (this.es) return;
-    const es = new EventSource("/events");
+    const es = new EventSource("/api/v1/events");
     this.es = es;
 
     const types: SseEvent["type"][] = [

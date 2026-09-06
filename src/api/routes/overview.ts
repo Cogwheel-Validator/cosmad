@@ -57,11 +57,9 @@ const MIN_DAYS = 1;
 const MAX_DAYS = 365;
 const DEFAULT_DAYS = 30;
 
-const daysQuery = type({
-  days: type("string.integer.parse").pipe((q) =>
-    q >= MIN_DAYS && q <= MAX_DAYS ? q : DEFAULT_DAYS,
-  ),
-});
+const daysQuery = type({ "days?": "string.integer.parse" }).pipe((q) => ({
+  days: q.days == null ? DEFAULT_DAYS : Math.min(Math.max(q.days, MIN_DAYS), MAX_DAYS),
+}));
 const overviewSchema = type({
   days: "number",
   chains: type({

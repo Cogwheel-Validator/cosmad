@@ -52,7 +52,7 @@ export async function startApiServer(
 
     server = http.createServer((req, res) => {
       const url = req.url ?? "/";
-      if (url.startsWith("/api/") || url === "/api" || url === "/events") {
+      if (url.startsWith("/api/") || url === "/api") {
         honoHandler(req, res).catch((err: unknown) => {
           log.error("Hono handler error: %s", err);
           if (!res.headersSent) {

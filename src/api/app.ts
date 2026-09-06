@@ -23,11 +23,11 @@ export async function createApp(databases: Map<string, IApiReadDb>, chains: Chai
   app.use("/api/*", cors());
   app.use(trimTrailingSlash());
 
-  app.get("/api/chains", (c) => c.json({ chains: supportedChains }));
-  app.route("/api/chains", blocksRouter(databases));
-  app.route("/api/chains", alertsRouter(databases));
-  app.route("/api/chains", statsRouter(databases));
-  app.route("/api", overviewRouter(databases, chains));
+  app.get("/api/v1/chains", (c) => c.json({ chains: supportedChains }));
+  app.route("/api/v1/chains", blocksRouter(databases));
+  app.route("/api/v1/chains", alertsRouter(databases));
+  app.route("/api/v1/chains", statsRouter(databases));
+  app.route("/api/v1", overviewRouter(databases, chains));
 
   app.get(
     "/api/openapi.json",
@@ -39,7 +39,7 @@ export async function createApp(databases: Map<string, IApiReadDb>, chains: Chai
   );
   app.get("/api/reference", Scalar({ url: "/api/openapi.json" }));
 
-  app.get("/events", (c) => {
+  app.get("/api/v1/events", (c) => {
     return streamSSE(c, async (stream) => {
       let closed = false;
 
