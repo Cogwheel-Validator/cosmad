@@ -1,4 +1,5 @@
 import { type ChildProcess, fork } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config/app_config";
@@ -23,6 +24,65 @@ const READY_TIMEOUT_MS = 30_000;
 // The engine can spend a long time replaying an uncheckpointed DuckDB WAL on
 // startup. It will use extended timeout.
 const ENGINE_READY_TIMEOUT_MS = 300_000;
+
+// Tracks the engine child's PID across runs, so a leftover engine from a run that
+// died without cleanly shutting its children down.
+const ENGINE_PID_FILE = resolve(config.dbDir, "engine.pid");
+const STALE_ENGINE_KILL_TIMEOUT_MS = 10_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readCmdline(pid: number): string | null {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+// Finds a leftover engine process from a previous run and kill it.
+async function reapStaleEngine(): Promise<void> {
+  if (!existsSync(ENGINE_PID_FILE)) return;
+
+  const pid = Number.parseInt(readFileSync(ENGINE_PID_FILE, "utf8").trim(), 10);
+  rmSync(ENGINE_PID_FILE, { force: true });
+  if (!Number.isInteger(pid) || !isAlive(pid)) return;
+
+  // Confirm this PID is actually still DuckDB engine before signaling it.
+  const cmdline = readCmdline(pid);
+  if (cmdline === null || !cmdline.includes("engine/main")) {
+    log.warn("Stale pidfile referenced PID %d, which is no longer the engine - ignoring", pid);
+    return;
+  }
+
+  log.warn("Found a leftover engine process from a previous run (PID %d) - terminating it", pid);
+  process.kill(pid, "SIGTERM");
+
+  const deadline = Date.now() + STALE_ENGINE_KILL_TIMEOUT_MS;
+  while (isAlive(pid) && Date.now() < deadline) await sleep(200);
+
+  if (isAlive(pid)) {
+    log.error(
+      "PID %d did not exit within %dms of SIGTERM - sending SIGKILL",
+      pid,
+      STALE_ENGINE_KILL_TIMEOUT_MS,
+    );
+    process.kill(pid, "SIGKILL");
+    while (isAlive(pid)) await sleep(100);
+  }
+  log.info("Leftover engine process (PID %d) terminated", pid);
+}
 
 function waitForReady(
   child: ChildProcess,
@@ -82,7 +142,14 @@ async function main() {
   };
 
   try {
+    mkdirSync(config.dbDir, { recursive: true });
+    await reapStaleEngine();
+
     const engine = spawn(`engine/main.${ext}`, "engine");
+    if (engine.pid !== undefined) {
+      writeFileSync(ENGINE_PID_FILE, String(engine.pid));
+      engine.once("exit", () => rmSync(ENGINE_PID_FILE, { force: true }));
+    }
     await waitForReady(engine, "engine", ENGINE_READY_TIMEOUT_MS);
     log.info("engine ready");
 

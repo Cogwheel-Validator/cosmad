@@ -20,11 +20,13 @@ export interface DuckDbOptions {
 
 // A duckdb instance that can read and write data.
 export class RWDB {
+  instance: DuckDBInstance;
   conn: DuckDBConnection;
   log: Logger;
 
   // Private constructor, use create() instead.
-  private constructor(conn: DuckDBConnection) {
+  private constructor(instance: DuckDBInstance, conn: DuckDBConnection) {
+    this.instance = instance;
     this.conn = conn;
     this.log = logger.child({ module: "RWDB" });
   }
@@ -55,7 +57,7 @@ export class RWDB {
     const conn = await instance.connect();
     log.info("Database opened in %dms", Date.now() - openStartedAt);
 
-    const rwdb = new RWDB(conn);
+    const rwdb = new RWDB(instance, conn);
     rwdb.log.info("Database connection established successfully");
     await rwdb.initSchema();
     return rwdb;
@@ -74,6 +76,7 @@ export class RWDB {
 
   public close() {
     this.conn.closeSync();
+    this.instance.closeSync();
     this.log.debug("Database connection closed successfully");
   }
 

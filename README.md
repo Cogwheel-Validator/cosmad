@@ -126,16 +126,21 @@ to manually interact with it unless you really need to.
 
 This is a work in progress and the roadmap is subject to change.
 
-- Add alert options:
+- Alert:
   - [x] PagerDuty
   - [x] Telegram
   - [ ] Slack
   - [x] Discord
   - [x] Healthchecks
-- [x] Record blocks and alerts and keep them in the database
-- [ ] Pruning database option
-- [ ] Store other validator data (e.g. delegator count, staked amount etc...)
+- Data Processor
+  - [x] Record blocks and alerts and keep them in the database
+  - [ ] Pruning database option
+  - [ ] Store other validator data (e.g. delegator count, staked amount etc...)
 - Dashboard:
   - [ ] Live tracking of the chain state
-  - [ ] Statistics for the last X days
+  - [ ] Statistics for the last 30 days
   - [ ] Per chain stats
+- Reports:
+  - [ ] Add pdf generation option
+  - [ ] Send reports
+  - [ ] Options per days (daily. weekly, monthly, quarterly etc...)
