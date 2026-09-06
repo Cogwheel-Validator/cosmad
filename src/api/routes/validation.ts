@@ -35,3 +35,14 @@ export function validLimit(raw: string | undefined): number {
   const parsed = limitString(raw);
   return parsed instanceof ArkErrors ? DEFAULT_LIMIT : parsed;
 }
+
+/**
+ * Parses a `page` query param, defaulting to 1 if invalid
+ * @param raw - raw page number in string
+ * @returns parsed page number, defaulting to 1 if invalid
+ */
+export function validPage(raw: string | undefined): number {
+  if (raw == null || raw === "") return 1;
+  const parsed = limitString(raw);
+  return parsed instanceof ArkErrors ? 1 : parsed;
+}

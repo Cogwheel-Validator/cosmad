@@ -29,7 +29,7 @@ export async function startWatcher(
     const h = await db.latestBlockHeight();
     lastHeights.set(chainId, (h.ok ? h.value : null) ?? 0n);
 
-    const a = await db.getUnclosedAlerts();
+    const a = await db.getUnclosedAlerts(200, 1); // should be enough
     lastAlertIds.set(chainId, new Set((a.ok ? a.value : []).map((x) => x.alertId)));
   }
 
@@ -63,7 +63,7 @@ export async function startWatcher(
   };
 
   const checkAlerts = async (chainId: string, db: IApiReadDb) => {
-    const aResult = await db.getUnclosedAlerts();
+    const aResult = await db.getUnclosedAlerts(200, 1);
     if (!aResult.ok) return;
 
     const current = aResult.value;

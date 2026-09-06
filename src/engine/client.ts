@@ -158,10 +158,12 @@ export class EngineClient implements IWriteDb {
     );
   }
 
-  public async getUnclosedAlerts(): Promise<Result<Alert[], Error>> {
+  public async getUnclosedAlerts(limit: number, page: number): Promise<Result<Alert[], Error>> {
     const response = await this.connection.request({
       type: "getUnclosedAlerts",
       chainId: this.chainId,
+      limit,
+      page,
     });
     return toResult<"getUnclosedAlerts", Alert[]>(response, (value) => value.map(wireToAlert));
   }
@@ -285,8 +287,8 @@ export class ApiEngineClient implements IApiReadDb {
     return this.client.getAlert(alertKey);
   }
 
-  public getUnclosedAlerts(): Promise<Result<Alert[], Error>> {
-    return this.client.getUnclosedAlerts();
+  public getUnclosedAlerts(limit: number, page: number): Promise<Result<Alert[], Error>> {
+    return this.client.getUnclosedAlerts(limit, page);
   }
 
   public getChainSignedPercentage(

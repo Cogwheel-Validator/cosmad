@@ -129,7 +129,7 @@ describe("engine over Unix socket", () => {
     );
     expect(insertResult.ok).toBe(true);
 
-    const unclosed = await db.getUnclosedAlerts();
+    const unclosed = await db.getUnclosedAlerts(100, 1);
     assert(unclosed.ok);
     expect(unclosed.value.map((a) => a.alertId)).toContain(alertId);
 

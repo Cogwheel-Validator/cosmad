@@ -123,7 +123,10 @@ export interface EngineOps {
   latestBlockHeight: { params: { chainId: string }; result: string | null };
   insertAlert: { params: { chainId: string; alert: WireAlert }; result: void };
   getAlert: { params: { chainId: string; alertKey: string }; result: WireAlert | null };
-  getUnclosedAlerts: { params: { chainId: string }; result: WireAlert[] };
+  getUnclosedAlerts: {
+    params: { chainId: string; limit: number; page: number };
+    result: WireAlert[];
+  };
   closeAlert: { params: { chainId: string; alertId: string; closedAt: string }; result: void };
   touchAlertNotified: {
     params: { chainId: string; alertId: string; notifiedAt: string; repeatCount: number };

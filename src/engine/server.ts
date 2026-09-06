@@ -60,7 +60,7 @@ const handlers: Handlers = {
     return r.ok ? { ok: true, value: r.value ? alertToWire(r.value) : null } : r;
   },
   getUnclosedAlerts: async (p, { db }) => {
-    const r = await db.getUnclosedAlerts(p.chainId);
+    const r = await db.getUnclosedAlerts(p.chainId, p.limit, p.page);
     return r.ok ? { ok: true, value: r.value.map(alertToWire) } : r;
   },
   closeAlert: (p, { db }) => db.closeAlert(p.alertId, new Date(p.closedAt)),

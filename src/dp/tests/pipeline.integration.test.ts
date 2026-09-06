@@ -286,7 +286,7 @@ describe("ingest pipeline integration", () => {
     expect(commitCalls.some((u) => u.startsWith(RPC_1))).toBe(true);
     expect(commitCalls.some((u) => u.startsWith(RPC_2))).toBe(true);
 
-    const unclosed = await db.getUnclosedAlerts(CHAIN_ID);
+    const unclosed = await db.getUnclosedAlerts(CHAIN_ID, 100, 1);
     assert(unclosed.ok);
     expect(unclosed.value).toHaveLength(1);
     expect(unclosed.value[0].alertType).toBe("consecutive_miss");
@@ -315,7 +315,7 @@ describe("ingest pipeline integration", () => {
     const heights = await allBlockHeights();
     expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108]);
 
-    const unclosed = await db.getUnclosedAlerts(CHAIN_ID);
+    const unclosed = await db.getUnclosedAlerts(CHAIN_ID, 100, 1);
     assert(unclosed.ok);
     expect(unclosed.value).toHaveLength(1);
     expect(unclosed.value[0].repeatCount).toBe(1);
@@ -344,7 +344,7 @@ describe("ingest pipeline integration", () => {
     const heights = await allBlockHeights();
     expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
 
-    const unclosed = await db.getUnclosedAlerts(CHAIN_ID);
+    const unclosed = await db.getUnclosedAlerts(CHAIN_ID, 100, 1);
     assert(unclosed.ok);
     expect(unclosed.value).toHaveLength(0);
 

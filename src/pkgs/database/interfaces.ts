@@ -13,7 +13,7 @@ export interface IReadDb {
   getChainSignedPercentage(days: number): Promise<Result<ChainSignatureStats | null, Error>>;
   getDailySignedStats(days: number): Promise<Result<DailyBlockStats[], Error>>;
   getAlert(alertKey: string): Promise<Result<Alert | null, Error>>;
-  getUnclosedAlerts(): Promise<Result<Alert[], Error>>;
+  getUnclosedAlerts(limit: number, page: number): Promise<Result<Alert[], Error>>;
   close(): void;
 }
 

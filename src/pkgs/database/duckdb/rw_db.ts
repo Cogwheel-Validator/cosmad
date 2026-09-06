@@ -109,8 +109,12 @@ export class RWDB {
     return alertQueries.getAlert(this.conn, this.log, alertKey);
   }
 
-  public getUnclosedAlerts(chainId: string): Promise<Result<Alert[], Error>> {
-    return alertQueries.getUnclosedAlerts(this.conn, this.log, chainId);
+  public getUnclosedAlerts(
+    chainId: string,
+    limit: number,
+    page: number,
+  ): Promise<Result<Alert[], Error>> {
+    return alertQueries.getUnclosedAlerts(this.conn, this.log, chainId, limit, page);
   }
 
   public closeAlert(alertId: string, closedAt: Date): Promise<Result<void, Error>> {

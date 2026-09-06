@@ -287,7 +287,7 @@ describe("RWDB alerts", () => {
   });
 
   test("getUnclosedAlerts returns an empty array when no alerts exist", async () => {
-    const result = await db.getUnclosedAlerts(alertChainId);
+    const result = await db.getUnclosedAlerts(alertChainId, 100, 1);
     expect(result.ok).toBe(true);
     assert(result.ok);
     expect(result.value).toEqual([]);
@@ -317,7 +317,7 @@ describe("RWDB alerts", () => {
   });
 
   test("getUnclosedAlerts returns the open alert", async () => {
-    const result = await db.getUnclosedAlerts(alertChainId);
+    const result = await db.getUnclosedAlerts(alertChainId, 100, 1);
     expect(result.ok).toBe(true);
     assert(result.ok);
     expect(result.value).toHaveLength(1);
@@ -338,7 +338,7 @@ describe("RWDB alerts", () => {
   });
 
   test("getUnclosedAlerts returns all open alerts ordered oldest-first", async () => {
-    const result = await db.getUnclosedAlerts(alertChainId);
+    const result = await db.getUnclosedAlerts(alertChainId, 100, 1);
     expect(result.ok).toBe(true);
     assert(result.ok);
     expect(result.value?.length).toBe(2);
@@ -360,7 +360,7 @@ describe("RWDB alerts", () => {
   });
 
   test("getUnclosedAlerts excludes closed alerts", async () => {
-    const result = await db.getUnclosedAlerts(alertChainId);
+    const result = await db.getUnclosedAlerts(alertChainId, 100, 1);
     expect(result.ok).toBe(true);
     assert(result.ok);
     const alertIds = result.value?.map((a) => a.alertId) ?? [];
@@ -378,11 +378,11 @@ describe("RWDB alerts", () => {
       }),
     );
 
-    const result = await db.getUnclosedAlerts(alertChainId);
+    const result = await db.getUnclosedAlerts(alertChainId, 100, 1);
     assert(result.ok);
     expect(result.value.map((a) => a.alertId)).not.toContain(otherKey);
 
-    const otherResult = await db.getUnclosedAlerts("other-alert-chain");
+    const otherResult = await db.getUnclosedAlerts("other-alert-chain", 100, 1);
     assert(otherResult.ok);
     expect(otherResult.value.map((a) => a.alertId)).toContain(otherKey);
   });

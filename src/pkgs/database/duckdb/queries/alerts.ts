@@ -75,6 +75,8 @@ export async function getUnclosedAlerts(
   conn: DuckDBConnection,
   log: Logger,
   chainId: string,
+  limit: number,
+  page: number,
 ): Promise<Result<Alert[], Error>> {
   const sql = `
     SELECT
@@ -89,9 +91,10 @@ export async function getUnclosedAlerts(
     WHERE
       chain_id = ? AND
       closed_at IS NULL
-    ORDER BY opened_at ASC`;
+    ORDER BY opened_at ASC
+    LIMIT ? OFFSET ?`;
   try {
-    const result = await conn.runAndReadAll(sql, [chainId]);
+    const result = await conn.runAndReadAll(sql, [chainId, limit, (page - 1) * limit]);
     const rows = result.getRowObjects();
     return { ok: true, value: rows.map((row) => rowToAlert(row)) };
   } catch (error) {

@@ -36,8 +36,8 @@ export class ChainScopedDb implements IWriteDb {
     return this.db.getAlert(alertKey);
   }
 
-  public getUnclosedAlerts(): Promise<Result<Alert[], Error>> {
-    return this.db.getUnclosedAlerts(this.chainId);
+  public getUnclosedAlerts(limit: number, page: number): Promise<Result<Alert[], Error>> {
+    return this.db.getUnclosedAlerts(this.chainId, limit, page);
   }
 
   public closeAlert(alertId: string, closedAt: Date): Promise<Result<void, Error>> {

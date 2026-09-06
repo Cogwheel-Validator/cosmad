@@ -7,6 +7,7 @@ import { commitToBlock } from "../chain_worker";
 
 const VALCONS_HEX = "8A948A32DC693745146C2CD913815B166675809B";
 const VALOPER_ADDRESS = "cosmosvaloper1test";
+const VALCONS_ADDRESS = "cosmosvalcons1placeholder";
 const FAKE_SIGNATURE =
   "VNMOnZJIFUcZmmBSdfewTpsdAnviEL4PMcc9qaiI/z1XdP2XR4ENAoD+L4hg1FmtzlLnBWoujeJ/bwKrp5+CBw==";
 
@@ -18,7 +19,7 @@ function bftChain(): ChainConfig {
     prettyName: "Test BFT",
     chainType: "bft",
     valoperAddress: VALOPER_ADDRESS,
-    valconsAddress: "cosmosvalcons1placeholder",
+    valconsAddress: VALCONS_ADDRESS,
     rpcUrls: [{ url: "https://rpc.test", alertIfDown: true }],
     alertConfig: {
       alertIfInactive: false,
@@ -31,7 +32,7 @@ function bftChain(): ChainConfig {
 }
 
 function tm2Chain(): ChainConfig {
-  const { valconsAddress: _valconsAddress, ...rest } = bftChain();
+  const { ...rest } = bftChain();
   return {
     ...rest,
     chainId: "test-tm2",
@@ -264,7 +265,7 @@ describe("commitToBlock - bft: no signature entry, disambiguated via active-set 
 
 describe("commitToBlock - tm2, no active-set option, never calls the query", () => {
   test("matching precommit with type=2 -> signed = 1", async () => {
-    const commit = tm2Commit(VALOPER_ADDRESS, 2);
+    const commit = tm2Commit(VALCONS_ADDRESS, 2);
     const block = await commitToBlock(
       commit,
       tm2Chain(),
