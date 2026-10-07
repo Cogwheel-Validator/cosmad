@@ -18,16 +18,26 @@ export interface DuckDbOptions {
   maxTempDirectorySize?: string;
 }
 
+// Number of dedicated read connections, round-robined across for every read-only query.
+const READER_POOL_SIZE = 10;
+
 // A duckdb instance that can read and write data.
 export class RWDB {
   instance: DuckDBInstance;
   conn: DuckDBConnection;
   log: Logger;
+  private readConns: DuckDBConnection[];
+  private nextReadConnIdx = 0;
 
   // Private constructor, use create() instead.
-  private constructor(instance: DuckDBInstance, conn: DuckDBConnection) {
+  private constructor(
+    instance: DuckDBInstance,
+    conn: DuckDBConnection,
+    readConns: DuckDBConnection[],
+  ) {
     this.instance = instance;
     this.conn = conn;
+    this.readConns = readConns;
     this.log = logger.child({ module: "RWDB" });
   }
 
@@ -55,9 +65,12 @@ export class RWDB {
     const openStartedAt = Date.now();
     const instance = await DuckDBInstance.create(`${dbDir}/cosmad.duckdb`, dbOptions);
     const conn = await instance.connect();
+    const readConns = await Promise.all(
+      Array.from({ length: READER_POOL_SIZE }, () => instance.connect()),
+    );
     log.info("Database opened in %dms", Date.now() - openStartedAt);
 
-    const rwdb = new RWDB(instance, conn);
+    const rwdb = new RWDB(instance, conn, readConns);
     rwdb.log.info("Database connection established successfully");
     await rwdb.initSchema();
     return rwdb;
@@ -74,8 +87,17 @@ export class RWDB {
     this.log.info("Schema initialised");
   }
 
+  /** Round-robins across the reader pool - call once per read-only query issued. */
+  private nextReadConn = (): DuckDBConnection => {
+    const conn = this.readConns[this.nextReadConnIdx];
+    this.nextReadConnIdx = (this.nextReadConnIdx + 1) % this.readConns.length;
+    // biome-ignore lint/style/noNonNullAssertion: <nextReadConnIdx is always < readConns.length>
+    return conn!;
+  };
+
   public close() {
     this.conn.closeSync();
+    for (const conn of this.readConns) conn.closeSync();
     this.instance.closeSync();
     this.log.debug("Database connection closed successfully");
   }
@@ -97,11 +119,11 @@ export class RWDB {
     chainId: string,
     chainType: "bft" | "tm2",
   ): Promise<Result<Block | null, Error>> {
-    return blockQueries.latestBlock(this.conn, this.log, chainId, chainType);
+    return blockQueries.latestBlock(this.nextReadConn(), this.log, chainId, chainType);
   }
 
   public latestBlockHeight(chainId: string): Promise<Result<bigint | null, Error>> {
-    return blockQueries.latestBlockHeight(this.conn, this.log, chainId);
+    return blockQueries.latestBlockHeight(this.nextReadConn(), this.log, chainId);
   }
 
   public insertAlert(alert: Alert): Promise<Result<void, Error>> {
@@ -109,7 +131,7 @@ export class RWDB {
   }
 
   public getAlert(alertKey: string): Promise<Result<Alert | null, Error>> {
-    return alertQueries.getAlert(this.conn, this.log, alertKey);
+    return alertQueries.getAlert(this.nextReadConn(), this.log, alertKey);
   }
 
   public getUnclosedAlerts(
@@ -117,7 +139,7 @@ export class RWDB {
     limit: number,
     page: number,
   ): Promise<Result<Alert[], Error>> {
-    return alertQueries.getUnclosedAlerts(this.conn, this.log, chainId, limit, page);
+    return alertQueries.getUnclosedAlerts(this.nextReadConn(), this.log, chainId, limit, page);
   }
 
   public closeAlert(alertId: string, closedAt: Date): Promise<Result<void, Error>> {
@@ -136,7 +158,7 @@ export class RWDB {
     chainId: string,
     days: number,
   ): Promise<Result<ChainSignatureStats | null, Error>> {
-    return blockQueries.getChainSignedPercentage(this.conn, this.log, chainId, days);
+    return blockQueries.getChainSignedPercentage(this.nextReadConn(), this.log, chainId, days);
   }
 
   public getBlockByHeight(
@@ -144,7 +166,7 @@ export class RWDB {
     height: bigint,
     chainType: "bft" | "tm2",
   ): Promise<Result<Block | null, Error>> {
-    return blockQueries.getBlockByHeight(this.conn, this.log, chainId, height, chainType);
+    return blockQueries.getBlockByHeight(this.nextReadConn(), this.log, chainId, height, chainType);
   }
 
   public getBlockByRange(
@@ -154,7 +176,7 @@ export class RWDB {
     chainType: "bft" | "tm2",
   ): Promise<Result<Block[], Error>> {
     return blockQueries.getBlockByRange(
-      this.conn,
+      this.nextReadConn(),
       this.log,
       chainId,
       startHeight,
@@ -168,13 +190,31 @@ export class RWDB {
     startHeight: bigint,
     endHeight: bigint,
   ): Promise<Result<BlockWindowStats, Error>> {
-    return blockQueries.getBlockStats(this.conn, this.log, chainId, startHeight, endHeight);
+    return blockQueries.getBlockStats(
+      this.nextReadConn(),
+      this.log,
+      chainId,
+      startHeight,
+      endHeight,
+    );
   }
 
   public getDailySignedStats(
     chainId: string,
     days: number,
   ): Promise<Result<DailyBlockStats[], Error>> {
-    return blockQueries.getDailySignedStats(this.conn, this.log, chainId, days);
+    return blockQueries.getDailySignedStats(this.nextReadConn(), this.log, chainId, days);
+  }
+
+  public getDailySignedStatsAllChains(
+    days: number,
+  ): Promise<Result<Map<string, DailyBlockStats[]>, Error>> {
+    return blockQueries.getDailySignedStatsAllChains(this.nextReadConn(), this.log, days);
+  }
+
+  public getLatestBlocksAllChains(
+    chainTypes: Map<string, "bft" | "tm2">,
+  ): Promise<Result<Map<string, Block>, Error>> {
+    return blockQueries.getLatestBlocksAllChains(this.nextReadConn, this.log, chainTypes);
   }
 }
