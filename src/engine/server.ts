@@ -24,6 +24,7 @@ const log = logger.child({ module: "EngineServer" });
 interface Ctx {
   db: RWDB;
   chainType: chainType;
+  knownChainIds: Map<string, chainType>;
 }
 
 // A generic handler for every operation K: takes that op's params, returns that op's result, or an Error.
@@ -96,6 +97,29 @@ const handlers: Handlers = {
         }
       : r;
   },
+  getOverviewDailyStats: async (p, { db }) => {
+    const r = await db.getDailySignedStatsAllChains(p.days);
+    if (!r.ok) return r;
+    return {
+      ok: true,
+      value: [...r.value.entries()].map(([chainId, daily]) => ({
+        chainId,
+        daily: daily.map((s) => ({ date: s.date, total: s.total, missed: s.missed })),
+      })),
+    };
+  },
+  getOverviewLatestBlocks: async (_p, { db, knownChainIds }) => {
+    const r = await db.getLatestBlocksAllChains(knownChainIds);
+    if (!r.ok) return r;
+    return {
+      ok: true,
+      value: [...r.value.entries()].map(([chainId, block]) => ({
+        chainId,
+        // biome-ignore lint/style/noNonNullAssertion: <getLatestBlocksAllChains only returns chainIds present in knownChainIds>
+        block: blockToWire(block, knownChainIds.get(chainId)!),
+      })),
+    };
+  },
 };
 
 async function dispatch(
@@ -104,18 +128,25 @@ async function dispatch(
   knownChainIds: Map<string, chainType>, //chainId + chainType
 ): Promise<EngineResponse> {
   const { id, body } = request;
-  if (!knownChainIds.has(body.chainId)) {
-    return { id, body: { ok: false, error: `Unknown chain '${body.chainId}'` } };
+
+  // Chain-agnostic ops (e.g. the overview endpoint's cross-chain queries) don't carry a
+  // chainId, so chainType here is an unused placeholder for those - only ops that take a
+  // chainId param read it, and knownChainIds is what those handlers use instead.
+  let chainType: chainType = "bft";
+  if ("chainId" in body) {
+    if (!knownChainIds.has(body.chainId)) {
+      return { id, body: { ok: false, error: `Unknown chain '${body.chainId}'` } };
+    }
+    // biome-ignore lint/style/noNonNullAssertion: <the check above ensures this is defined>
+    chainType = knownChainIds.get(body.chainId)!;
   }
-  // biome-ignore lint/style/noNonNullAssertion: <the check above ensures this is defined>
-  const chainType: chainType = knownChainIds.get(body.chainId)!;
 
   try {
     // body.type is one of keyof EngineOps by construction of EngineRequestBody, so this
     // lookup is safe even though TS can't itself prove a union-indexed lookup into a
     // mapped-type record preserves the per-key params/result pairing.
     const handler = handlers[body.type] as Handler<typeof body.type>;
-    const r = await handler(body, { db, chainType });
+    const r = await handler(body, { db, chainType, knownChainIds });
     return {
       id,
       body: r.ok ? { ok: true, value: r.value } : { ok: false, error: r.error.message },

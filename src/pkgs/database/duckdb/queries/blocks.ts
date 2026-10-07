@@ -237,6 +237,79 @@ export async function getDailySignedStats(
 }
 
 /**
+ * getDailySignedStatsAllChains returns per-day signed/missed block counts for every chain
+ * in a single scan of `blocks`, instead of one scan per chain.
+ * @param days an integer number of days to look back (clamped to [1, 365])
+ * @returns a promise wrapped result of a map from chainId to that chain's daily stats
+ */
+export async function getDailySignedStatsAllChains(
+  conn: DuckDBConnection,
+  log: Logger,
+  days: number,
+): Promise<Result<Map<string, DailyBlockStats[]>, Error>> {
+  const sql = `
+    SELECT
+      chain_id,
+      date_trunc('day', time) as day,
+      count(*) FILTER (WHERE signed != -1) as total,
+      count(*) FILTER (WHERE signed = 0) as missed
+    FROM blocks
+    WHERE time >= ?
+    GROUP BY chain_id, day
+    ORDER BY chain_id, day`;
+  try {
+    const result = await conn.run(sql, [daysCutoff(days)]);
+    const rows = await result.getRowObjects();
+    const byChain = new Map<string, DailyBlockStats[]>();
+    for (const row of rows) {
+      const chainId = row.chain_id as string;
+      const daily = byChain.get(chainId) ?? [];
+      daily.push(rowToDailyBlockStats(row));
+      byChain.set(chainId, daily);
+    }
+    return { ok: true, value: byChain };
+  } catch (error) {
+    log.error("Error getting daily signed stats for all chains: %s", error);
+    return { ok: false, error: toError(error) };
+  }
+}
+
+/**
+ * getLatestBlocksAllChains returns the latest block for every chain, in one round trip from the
+ * caller's perspective. Internally it fans out one `latestBlock` call per chain (run
+ * concurrently, each drawing its own connection via `getConn`) rather than a single
+ * `GROUP BY chain_id` query: a per-chain `ORDER BY height DESC LIMIT 1` lets DuckDB use its top-N
+ * pushdown, while `GROUP BY` forces a full scan of `blocks` to compute every group's max -
+ * measured ~4x slower than this fan-out. Calling `getConn` once per chain (rather than sharing
+ * one connection across the whole fan-out) lets the calls actually run in parallel across a
+ * reader connection pool instead of queuing on a single connection.
+ * @param getConn returns a connection to use for one call - invoked once per chain
+ * @param chainTypes a map of chainId to chainType, used to decode each chain's block hash
+ * @returns a promise wrapped result of a map from chainId to that chain's latest block
+ */
+export async function getLatestBlocksAllChains(
+  getConn: () => DuckDBConnection,
+  log: Logger,
+  chainTypes: Map<string, "bft" | "tm2">,
+): Promise<Result<Map<string, Block>, Error>> {
+  try {
+    const entries = [...chainTypes.entries()];
+    const results = await Promise.all(
+      entries.map(([chainId, chainType]) => latestBlock(getConn(), log, chainId, chainType)),
+    );
+    const byChain = new Map<string, Block>();
+    entries.forEach(([chainId], i) => {
+      const r = results[i];
+      if (r?.ok && r.value) byChain.set(chainId, r.value);
+    });
+    return { ok: true, value: byChain };
+  } catch (error) {
+    log.error("Error getting latest blocks for all chains: %s", error);
+    return { ok: false, error: toError(error) };
+  }
+}
+
+/**
  * getBlockByHeight returns a promise wrapped result of the block at the given height
  * @param chainId id specific to that chain
  * @param height a height to get the block for

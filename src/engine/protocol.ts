@@ -152,6 +152,15 @@ export interface EngineOps {
     params: { chainId: string; days: number };
     result: { date: string; total: number; missed: number }[];
   };
+  // Chain-agnostic ops for the overview endpoint - one round trip for every chain instead of one per chain.
+  getOverviewDailyStats: {
+    params: { days: number };
+    result: { chainId: string; daily: { date: string; total: number; missed: number }[] }[];
+  };
+  getOverviewLatestBlocks: {
+    params: unknown;
+    result: { chainId: string; block: WireBlock }[];
+  };
 }
 
 /** The result type for a given op key - e.g. `ResultOf<"getAlert">` is `WireAlert | null`. */

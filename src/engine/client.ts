@@ -69,13 +69,15 @@ export class EngineConnection {
   }
 
   /**
-   * forApiChain returns an IApiReadDb view of the chain, suitable for the API process.
+   * forApiChain returns an IApiReadDb view of the chain, suitable for the API process. It also
+   * carries the full chainId-to-chainType map so its chain-agnostic overview methods can decode
+   * any chain's blocks, not just its own.
    * @param chainId unique chain id
-   * @param chainType chain type (bft or tm2)
+   * @param chainTypes a map of every known chainId to its chainType
    * @returns an IApiReadDb view of the chain
    */
-  public forApiChain(chainId: string, chainType: chainType): IApiReadDb {
-    return new ApiEngineClient(this, chainId, chainType);
+  public forApiChain(chainId: string, chainTypes: Map<string, chainType>): IApiReadDb {
+    return new ApiEngineClient(this, chainId, chainTypes);
   }
 
   public request(body: EngineRequestBody): Promise<EngineResponse> {
@@ -267,12 +269,19 @@ export class EngineClient implements IWriteDb {
 
 // ApiEngineClient is an IApiReadDb view of the chain, suitable for the API process.
 // It should provide a class, that has less exposure than EngineClient, no write methods
-// and there shouldn't be any way to call write methods on it.
+// and there shouldn't be any way to call write methods on it. It also carries the full
+// chainId-to-chainType map so its chain-agnostic overview methods can decode any chain's
+// blocks, covering every chain in one request instead of one per chain.
 export class ApiEngineClient implements IApiReadDb {
   private client: EngineClient;
 
-  constructor(connection: EngineConnection, chainId: string, chainType: chainType) {
-    this.client = new EngineClient(connection, chainId, chainType);
+  constructor(
+    private connection: EngineConnection,
+    chainId: string,
+    private chainTypes: Map<string, chainType>,
+  ) {
+    // biome-ignore lint/style/noNonNullAssertion: <chainId is always a key of chainTypes - both come from config.chains>
+    this.client = new EngineClient(connection, chainId, chainTypes.get(chainId)!);
   }
 
   public latestBlock(): Promise<Result<Block | null, Error>> {
@@ -307,6 +316,37 @@ export class ApiEngineClient implements IApiReadDb {
 
   public getBlockByRange(start: bigint, end: bigint): Promise<Result<Block[], Error>> {
     return this.client.getBlockByRange(start, end);
+  }
+
+  public async getOverviewLatestBlocks(): Promise<Result<Map<string, Block>, Error>> {
+    const response = await this.connection.request({ type: "getOverviewLatestBlocks" });
+    return toResult<"getOverviewLatestBlocks", Map<string, Block>>(response, (entries) => {
+      const map = new Map<string, Block>();
+      for (const entry of entries) {
+        const chainType = this.chainTypes.get(entry.chainId);
+        if (chainType) map.set(entry.chainId, wireToBlock(entry.block, chainType));
+      }
+      return map;
+    });
+  }
+
+  public async getOverviewDailyStats(
+    days: number,
+  ): Promise<Result<Map<string, DailyBlockStats[]>, Error>> {
+    const response = await this.connection.request({ type: "getOverviewDailyStats", days });
+    return toResult<"getOverviewDailyStats", Map<string, DailyBlockStats[]>>(
+      response,
+      (entries) => {
+        const map = new Map<string, DailyBlockStats[]>();
+        for (const entry of entries) {
+          map.set(
+            entry.chainId,
+            entry.daily.map((d) => new DailyBlockStats(d.date, d.total, d.missed)),
+          );
+        }
+        return map;
+      },
+    );
   }
 
   /** Warning: the underlying socket is shared across chains, so call EngineConnection.close() only once. */

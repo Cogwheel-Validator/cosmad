@@ -35,7 +35,10 @@ export interface IWriteDb extends IReadDb {
   close(): void;
 }
 
-// Interface for the subset of IReadDb the API process actually calls.
+// Interface for the subset of IReadDb the API process actually calls, plus the chain-agnostic
+// overview reads (one round trip covering every chain, instead of the per-chain methods above
+// called once per chain). Only ApiEngineClient implements this, so these live here rather than
+// on IReadDb - a chain-scoped IWriteDb/IReadDb implementor has no sensible way to answer them.
 export type IApiReadDb = Pick<
   IReadDb,
   | "latestBlock"
@@ -47,4 +50,7 @@ export type IApiReadDb = Pick<
   | "getDailySignedStats"
   | "getBlockByHeight"
   | "getBlockByRange"
->;
+> & {
+  getOverviewLatestBlocks(): Promise<Result<Map<string, Block>, Error>>;
+  getOverviewDailyStats(days: number): Promise<Result<Map<string, DailyBlockStats[]>, Error>>;
+};

@@ -4,6 +4,7 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import type { ChainConfig } from "../../config/app_config";
 import type { DailyBlockStats } from "../../pkgs/database/analytics";
 import type { IApiReadDb } from "../../pkgs/database/interfaces";
+import type { Block } from "../../pkgs/database/tables";
 import type { ChainOverviewJson, ChainStatus, OverviewJson } from "../types";
 import { serializeDailyStats } from "../types";
 
@@ -88,13 +89,14 @@ const overviewSchema = type({
 
 /**
  * overviewRouter creates a Hono router with an overview endpoint that returns the combined daily block stats for all chains
- * @param databases map of chain IDs to database connections
+ * @param databases map of chain IDs to database connections - every entry shares the same
+ * underlying engine connection, so any one of them can answer the chain-agnostic overview reads
  * @param chainCfgs array of chain configurations
  * @returns a Hono router with an overview endpoint
  */
 export function overviewRouter(databases: Map<string, IApiReadDb>, chainCfgs: ChainConfig[]) {
   const router = new Hono();
-  const chainsById = new Map(chainCfgs.map((c) => [c.chainId, c]));
+  const overviewDb = databases.values().next().value;
 
   router.get(
     "/overview",
@@ -116,27 +118,27 @@ export function overviewRouter(databases: Map<string, IApiReadDb>, chainCfgs: Ch
     async (c) => {
       const days = c.req.valid("query").days;
 
-      const chainResults: ChainOverviewJson[] = [];
-      const perChainDaily: DailyBlockStats[][] = [];
+      const [latestResult, dailyResult] = overviewDb
+        ? await Promise.all([
+            overviewDb.getOverviewLatestBlocks(),
+            overviewDb.getOverviewDailyStats(days),
+          ])
+        : [];
 
-      for (const [chainId, db] of databases) {
-        const chain = chainsById.get(chainId);
-        if (!chain) continue;
+      const latestBlocks = latestResult?.ok ? latestResult.value : new Map<string, Block>();
+      const dailyByChain = dailyResult?.ok
+        ? dailyResult.value
+        : new Map<string, DailyBlockStats[]>();
 
-        const [latestResult, dailyResult] = await Promise.all([
-          db.latestBlock(),
-          db.getDailySignedStats(days),
-        ]);
-
-        const latestBlock = latestResult.ok ? latestResult.value : null;
-        const daily = dailyResult.ok ? dailyResult.value : [];
-        perChainDaily.push(daily);
+      const chainResults: ChainOverviewJson[] = chainCfgs.map((chain) => {
+        const latestBlock = latestBlocks.get(chain.chainId) ?? null;
+        const daily = dailyByChain.get(chain.chainId) ?? [];
 
         const totalBlocks = daily.reduce((sum, d) => sum + d.total, 0);
         const missedBlocks = daily.reduce((sum, d) => sum + d.missed, 0);
 
-        chainResults.push({
-          chainId,
+        return {
+          chainId: chain.chainId,
           prettyName: chain.prettyName,
           chainLogo: chain.chainLogo ?? null,
           status: chainStatus(chain, latestBlock?.time ?? null),
@@ -145,8 +147,12 @@ export function overviewRouter(databases: Map<string, IApiReadDb>, chainCfgs: Ch
           totalBlocks,
           missedBlocks,
           percentageSigned: percentageSigned(totalBlocks, missedBlocks),
-        });
-      }
+        };
+      });
+
+      const perChainDaily: DailyBlockStats[][] = chainCfgs.map(
+        (chain) => dailyByChain.get(chain.chainId) ?? [],
+      );
 
       const combined = combineDaily(perChainDaily);
       const combinedTotal = combined.reduce((sum, d) => sum + d.total, 0);
