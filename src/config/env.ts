@@ -2,6 +2,7 @@ import os from "node:os";
 
 export interface CosmadEnv {
   apiPort: number;
+  apiHost: string;
   dbThreads: string;
   dbMemLimit: string;
   dbMaxTempDirSize: string;
@@ -33,6 +34,7 @@ export function loadEnv(): CosmadEnv {
 
   return {
     apiPort: Number(process.env.PORT ?? 3000),
+    apiHost: process.env.HOST ?? "0.0.0.0",
     dbThreads: process.env.DB_THREADS ?? `${cpuCount}`,
     dbMemLimit: dbMemLimit,
     dbMaxTempDirSize: process.env.DB_MAX_TEMP_DIR_SIZE ?? "1GB",

@@ -1,0 +1,35 @@
+serve_api = true
+serve_dashboard = true
+
+# Optional. Omit [cors] to allow any origin ("*"). Fields mirror hono's cors() middleware.
+# [cors]
+# origin = ["https://dashboard.example.com"]   # string or list of strings
+# allow_methods = ["GET", "HEAD", "OPTIONS"]
+# allow_headers = ["X-Custom-Header"]
+# expose_headers = ["Content-Length"]
+# max_age = 600
+# credentials = false
+
+# Optional. Omit [csrf] to disable CSRF protection; an empty [csrf] enables hono's defaults
+# (same-origin only). Fields mirror hono's csrf() middleware.
+# [csrf]
+# origin = ["https://dashboard.example.com"]   # string or list of strings
+# sec_fetch_site = ["same-origin", "same-site"] # same-origin | same-site | none | cross-site
+
+[telegram]
+enabled = true
+bot_token = "CHANGE_ME"
+chat_id = "-100000000000"
+
+[discord]
+enabled = false
+webhook_url = "https://discord.com/api/webhooks/CHANGE_ME/CHANGE_ME"
+
+[pagerduty]
+enabled = false
+service_key = "CHANGE_ME"
+
+[health_check]
+enabled = false
+endpoint = "https://hc-ping.com/CHANGE_ME"
+ping = 60

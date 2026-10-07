@@ -2,6 +2,7 @@ import logger from "../pkgs/logger";
 import type { ChainConfigType } from "./chain_types";
 import { loadChainConfigs, loadGlobalConfig } from "./config";
 import type { GlobalConfigType } from "./global_config";
+import type { CorsConfigType, CsrfConfigType } from "./http_types";
 import type {
   DiscordConfigType,
   HealthCheckConfigType,
@@ -12,6 +13,8 @@ import type {
 export interface ConfigLoaderData {
   apiEnabled: boolean;
   dashboardEnabled: boolean;
+  cors: CorsConfigType | undefined;
+  csrf: CsrfConfigType | undefined;
   chainConfigs: Map<string, ChainConfigType>;
   globalAlerts: {
     telegram: TelegramConfigType | undefined;
@@ -35,6 +38,8 @@ export class ConfigLoader {
       this.data = {
         apiEnabled: globalConfig.value.serveApi,
         dashboardEnabled: globalConfig.value.serveDashboard,
+        cors: globalConfig.value.cors,
+        csrf: globalConfig.value.csrf,
         chainConfigs: chainMap,
         globalAlerts: {
           telegram: globalConfig.value.telegram,

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { ChainConfig } from "../config/app_config";
+import type { CorsConfigType, CsrfConfigType } from "../config/http_types";
 import type { IApiReadDb } from "../pkgs/database/interfaces";
 import logger from "../pkgs/logger";
 import { createApp } from "./app";
@@ -20,18 +21,24 @@ const frontendDist = resolve(__dirname, "../frontend/dist");
  * @param databases - The map for every chain and the database API interface.
  * @param chains - The config files.
  * @param port - The port to listen on.
+ * @param host - The network interface to bind to (e.g. "0.0.0.0", or "127.0.0.1" behind a local reverse proxy).
  * @param isDev - Whether the server is running in development mode.
  * @param enableDashboard - Whether to enable the dashboard.
+ * @param cors - CORS settings, or undefined to allow any origin.
+ * @param csrf - CSRF protection settings, or undefined to disable CSRF protection.
  * @returns A function that closes the server.
  */
 export async function startApiServer(
   databases: Map<string, IApiReadDb>,
   chains: ChainConfig[],
   port: number,
+  host: string,
   isDev: boolean,
   enableDashboard: boolean,
+  cors?: CorsConfigType,
+  csrf?: CsrfConfigType,
 ): Promise<() => void> {
-  const app = await createApp(databases, chains);
+  const app = await createApp(databases, chains, cors, csrf);
 
   if (!isDev && enableDashboard) {
     app.use("/*", serveStatic({ root: frontendDist }));
@@ -72,9 +79,9 @@ export async function startApiServer(
   }
 
   return new Promise<() => void>((resolvePromise) => {
-    server.listen(port, () => {
+    server.listen(port, host, () => {
       log.info(
-        `Server running on http://localhost:${port} [${isDev ? "dev - Vite middleware" : "prod - static assets"}]`,
+        `Server running on http://${host}:${port} [${isDev ? "dev - Vite middleware" : "prod - static assets"}]`,
       );
       resolvePromise(() => server.close());
     });

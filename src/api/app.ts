@@ -1,10 +1,12 @@
 import { Scalar } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
+import { cors as honoCors } from "hono/cors";
+import { csrf as honoCsrf } from "hono/csrf";
 import { streamSSE } from "hono/streaming";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import { openAPIRouteHandler } from "hono-openapi";
 import type { ChainConfig } from "../config/app_config";
+import type { CorsConfigType, CsrfConfigType } from "../config/http_types";
 import type { IApiReadDb } from "../pkgs/database/interfaces";
 import { alertsRouter } from "./routes/alerts";
 import { blocksRouter } from "./routes/blocks";
@@ -14,13 +16,19 @@ import { sseBus } from "./sse";
 import type { SseEvent } from "./types";
 import { startWatcher } from "./watcher";
 
-export async function createApp(databases: Map<string, IApiReadDb>, chains: ChainConfig[]) {
+export async function createApp(
+  databases: Map<string, IApiReadDb>,
+  chains: ChainConfig[],
+  cors?: CorsConfigType,
+  csrf?: CsrfConfigType,
+) {
   await startWatcher(databases);
   const app = new Hono();
   const supportedChains = [...databases.keys()];
 
   // set up middleware
-  app.use("/api/*", cors());
+  app.use("/api/*", honoCors({ ...cors, origin: cors?.origin ?? "*" }));
+  if (csrf) app.use("/api/*", honoCsrf(csrf));
   app.use(trimTrailingSlash());
 
   app.get("/api/v1/chains", (c) => c.json({ chains: supportedChains }));
@@ -33,7 +41,12 @@ export async function createApp(databases: Map<string, IApiReadDb>, chains: Chai
     "/api/openapi.json",
     openAPIRouteHandler(app, {
       documentation: {
-        info: { title: "cosmad API", version: "1.0.0" },
+        info: {
+          title: "cosmad API",
+          version: "1.0.0",
+          license: { name: "MIT", identifier: "MIT" },
+        },
+        servers: [{ url: "/" }],
       },
     }),
   );

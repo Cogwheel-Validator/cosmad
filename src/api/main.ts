@@ -24,17 +24,21 @@ async function main() {
   log.info("API process starting [%s]", isDev ? "dev" : "prod");
 
   const connection = await EngineConnection.connect(config.engineSocketPath, "reader");
+  const chainTypes = new Map(config.chains.map((chain) => [chain.chainId, chain.chainType]));
   const readDbs = new Map<string, IApiReadDb>();
   for (const chain of config.chains) {
-    readDbs.set(chain.chainId, connection.forApiChain(chain.chainId, chain.chainType));
+    readDbs.set(chain.chainId, connection.forApiChain(chain.chainId, chainTypes));
   }
 
   const stopServer = await startApiServer(
     readDbs,
     config.chains,
     config.api.port,
+    config.api.host,
     isDev,
     enableDashboard,
+    config.api.cors,
+    config.api.csrf,
   );
 
   const shutdown = () => {
