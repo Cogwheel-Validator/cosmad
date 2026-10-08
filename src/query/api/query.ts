@@ -6,6 +6,8 @@ import {
   type NodeData,
   NodeInfo,
   NodeSyncInfo,
+  SigningInfo,
+  type SigningInfoResponse,
   SlashingParams,
   type SlashingParamsResponse,
   ValidatorData,
@@ -49,6 +51,34 @@ export async function getSlashingParams(
     const response = await axios.get(url, { timeout });
     const data = camelcaseKeys(response.data, { deep: true });
     const result = SlashingParams(data);
+    if (result instanceof ArkErrors) {
+      return { ok: false, error: result.summary, problemsByPath: result.flatProblemsByPath };
+    }
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Slashing signing info of a validator (jail end time, tombstoned flag).
+ * @param valconsAddr bech32 consensus address (e.g. `cosmosvalcons1...`)
+ * @param height optional, sent via the x-cosmos-block-height header to query state as of a height
+ */
+export async function getSigningInfo(
+  api: string,
+  timeout: number = 5000,
+  valconsAddr: string,
+  height?: number,
+): Promise<Response<SigningInfoResponse>> {
+  const url = `${api}/cosmos/slashing/v1beta1/signing_infos/${valconsAddr}`;
+  try {
+    const response = await axios.get(url, {
+      timeout,
+      ...(height != null ? { headers: { "x-cosmos-block-height": String(height) } } : {}),
+    });
+    const data = camelcaseKeys(response.data, { deep: true });
+    const result = SigningInfo(data);
     if (result instanceof ArkErrors) {
       return { ok: false, error: result.summary, problemsByPath: result.flatProblemsByPath };
     }

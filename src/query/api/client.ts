@@ -1,7 +1,8 @@
 import type { Response } from "../response";
-import { getSlashingParams, getStatus, getValidatorData, getValset } from "./query";
+import { getSigningInfo, getSlashingParams, getStatus, getValidatorData, getValset } from "./query";
 import type {
   NodeData,
+  SigningInfoResponse,
   SlashingParamsResponse,
   ValidatorDataResponse,
   ValSetDataResponse,
@@ -43,6 +44,15 @@ export class ApiClient {
     return getValidatorData(url, timeout, valoperAddr, height);
   }
 
+  public async getSigningInfo(
+    url: string,
+    valconsAddr: string,
+    timeout?: number,
+    height?: number,
+  ): Promise<Response<SigningInfoResponse>> {
+    return getSigningInfo(url, timeout, valconsAddr, height);
+  }
+
   public async getSlashingParams(
     url: string,
     timeout?: number,
@@ -54,9 +64,14 @@ export class ApiClient {
     return getStatus(url);
   }
 
-  public async checkHealth(): Promise<{ healthyRpcs: string[]; unhealthyRpcs: string[] }> {
+  public async checkHealth(): Promise<{
+    healthyRpcs: string[];
+    unhealthyRpcs: string[];
+    reasons: Map<string, string>;
+  }> {
     const healthyRpcs: string[] = [];
     const unhealthyRpcs: string[] = [];
+    const reasons = new Map<string, string>();
     const results = await Promise.all(
       this.apiUrls.map(async (url) => {
         const result = await getStatus(url);
@@ -69,18 +84,24 @@ export class ApiClient {
     );
 
     for (const result of results) {
-      if (
-        result.ok &&
-        result.data.nodeInfo.defaultNodeInfo.network === this.chainId &&
-        result.data.syncInfo.syncing === false
-      ) {
-        healthyRpcs.push(result.url);
-      } else {
+      if (!result.ok) {
         unhealthyRpcs.push(result.url);
+        reasons.set(result.url, `unreachable: ${result.error ?? "unknown error"}`);
+      } else if (result.data.nodeInfo.defaultNodeInfo.network !== this.chainId) {
+        unhealthyRpcs.push(result.url);
+        reasons.set(
+          result.url,
+          `wrong network ${result.data.nodeInfo.defaultNodeInfo.network} (expected ${this.chainId})`,
+        );
+      } else if (result.data.syncInfo.syncing !== false) {
+        unhealthyRpcs.push(result.url);
+        reasons.set(result.url, "node is still syncing");
+      } else {
+        healthyRpcs.push(result.url);
       }
     }
 
-    return { healthyRpcs, unhealthyRpcs };
+    return { healthyRpcs, unhealthyRpcs, reasons };
   }
 
   public async getValset(

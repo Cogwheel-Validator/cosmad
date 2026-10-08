@@ -72,6 +72,22 @@ export const SlashingParams = type({
 
 export type SlashingParamsResponse = typeof SlashingParams.infer;
 
+// /cosmos/slashing/v1beta1/signing_infos/{cons_address}. Fields are optional on purpose:
+// depending on the node's JSON marshaler, zero values (tombstoned: false, counters of 0) can be
+// omitted entirely, and a missing "tombstoned" must read as false rather than fail to parse.
+export const SigningInfo = type({
+  valSigningInfo: type({
+    address: "string",
+    "startHeight?": "string",
+    "indexOffset?": "string",
+    "jailedUntil?": "string",
+    "tombstoned?": "boolean",
+    "missedBlocksCounter?": "string",
+  }),
+});
+
+export type SigningInfoResponse = typeof SigningInfo.infer;
+
 const ValSetValidator = type({
   address: "string",
   pubKey: type({

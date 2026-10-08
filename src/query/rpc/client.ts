@@ -38,7 +38,12 @@ export class RpcClient {
    * Check the health of the RPC URLs and return a list of healthy and unhealthy RPC URLs.
    * @returns A list of healthy and unhealthy RPC URLs.
    */
-  public async checkHealth(): Promise<{ healthyRpcs: string[]; unhealthyRpcs: string[] }> {
+  public async checkHealth(): Promise<{
+    healthyRpcs: string[];
+    unhealthyRpcs: string[];
+    reasons: Map<string, string>;
+  }> {
+    const reasons = new Map<string, string>();
     let highestHeight = 0;
     const responsiveRpcUrls = new Map<string, number>();
     const results = await Promise.all(
@@ -63,15 +68,20 @@ export class RpcClient {
           result.data.result.syncInfo.catchingUp === false
         ) {
           const height = Number(result.data.result.syncInfo.latestBlockHeight ?? 0);
-          if (height > highestHeight) {
-            highestHeight = height;
-            responsiveRpcUrls.set(result.rpcUrl, height);
-          }
+          responsiveRpcUrls.set(result.rpcUrl, height);
+          if (height > highestHeight) highestHeight = height;
         } else {
           unhealthyRpcs.push(result.rpcUrl);
+          reasons.set(
+            result.rpcUrl,
+            this.chainId !== result.data.result.nodeInfo.network
+              ? `wrong network ${result.data.result.nodeInfo.network} (expected ${this.chainId})`
+              : "node is catching up",
+          );
         }
       } else {
         unhealthyRpcs.push(result.rpcUrl);
+        reasons.set(result.rpcUrl, `unreachable: ${result.error ?? "unknown error"}`);
       }
     }
 
@@ -81,10 +91,14 @@ export class RpcClient {
         healthyRpcs.push(rpcUrl);
       } else {
         unhealthyRpcs.push(rpcUrl);
+        reasons.set(
+          rpcUrl,
+          `lagging behind: at height ${height}, best known height ${highestHeight}`,
+        );
       }
     }
 
-    return { healthyRpcs, unhealthyRpcs };
+    return { healthyRpcs, unhealthyRpcs, reasons };
   }
 
   // Wrapper for getStatus query

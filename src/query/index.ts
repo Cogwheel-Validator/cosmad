@@ -1,5 +1,6 @@
 import { ApiClient } from "./api/client";
 import type {
+  SigningInfoResponse,
   SlashingParamsResponse,
   ValidatorDataResponse,
   ValSetDataResponse,
@@ -8,10 +9,20 @@ import type { Response } from "./response";
 import { RpcClient } from "./rpc/client";
 import type { BlockCommitResponse } from "./rpc/types";
 
+/** Health of one configured endpoint as of the last health check. */
+export interface EndpointHealth {
+  url: string;
+  healthy: boolean;
+  /** Why the endpoint is unhealthy (unreachable, wrong network, syncing, lagging behind). */
+  reason?: string;
+}
+
 export class QueryOperator {
   private static readonly DEFAULT_RANGE_CHUNK_SIZE = 25;
   private healthyApis: string[] = [];
   private unhealthyApis: string[] = [];
+  private apiUnhealthyReasons = new Map<string, string>();
+  private rpcUnhealthyReasons = new Map<string, string>();
   private apiClient: ApiClient | undefined;
   private apiIndex = 0;
 
@@ -72,18 +83,50 @@ export class QueryOperator {
   }
 
   private async runRpcHealthCheck(): Promise<void> {
-    const { healthyRpcs, unhealthyRpcs } = await this.rpcClient.checkHealth();
+    const { healthyRpcs, unhealthyRpcs, reasons } = await this.rpcClient.checkHealth();
     this.healthyRpcs = healthyRpcs;
     this.unhealthyRpcs = unhealthyRpcs;
+    this.rpcUnhealthyReasons = reasons;
     this.lastRpcHealthCheckTime = Date.now();
   }
 
   private async runApiHealthCheck(): Promise<void> {
     if (!this.apiClient) return;
-    const { healthyRpcs, unhealthyRpcs } = await this.apiClient.checkHealth();
+    const { healthyRpcs, unhealthyRpcs, reasons } = await this.apiClient.checkHealth();
     this.healthyApis = healthyRpcs;
     this.unhealthyApis = unhealthyRpcs;
+    this.apiUnhealthyReasons = reasons;
     this.lastApiHealthCheckTime = Date.now();
+  }
+
+  /**
+   * Health of every configured endpoint as of the most recent health check. Health checks run
+   * lazily as part of normal querying (at most every healthCheckInterval seconds, or on every
+   * request while no endpoint is healthy). `rpc`/`api` are undefined until their first check
+   * has run, so "not checked yet" is never mistaken for "down".
+   */
+  public endpointHealth(): { rpc?: EndpointHealth[]; api?: EndpointHealth[] } {
+    const snapshot = (
+      urls: string[],
+      healthy: string[],
+      reasons: Map<string, string>,
+    ): EndpointHealth[] =>
+      urls.map((url) => {
+        if (healthy.includes(url)) return { url, healthy: true };
+        return { url, healthy: false, reason: reasons.get(url) ?? "unhealthy" };
+      });
+    return {
+      ...(this.lastRpcHealthCheckTime > 0
+        ? {
+            rpc: snapshot(this.rpcClient.rpcUrls, this.healthyRpcs, this.rpcUnhealthyReasons),
+          }
+        : {}),
+      ...(this.apiClient != null && this.lastApiHealthCheckTime > 0
+        ? {
+            api: snapshot(this.apiClient.apiUrls, this.healthyApis, this.apiUnhealthyReasons),
+          }
+        : {}),
+    };
   }
 
   private async getHealthyRpc(): Promise<string> {
@@ -201,6 +244,25 @@ export class QueryOperator {
     return this.withRetry(async () => {
       const apiUrl = await this.getHealthyApi();
       return client.getValidatorData(apiUrl, valoperAddr, undefined, height);
+    });
+  }
+
+  /**
+   * Retrieves the slashing signing info (jailed until, tombstoned) of a validator.
+   * @param valconsAddr bech32 consensus address of the validator.
+   * @param height optional - query state as of this height (x-cosmos-block-height header).
+   */
+  public async getSigningInfo(
+    valconsAddr: string,
+    height?: number,
+  ): Promise<Response<SigningInfoResponse>> {
+    if (this.chainType === "tm2")
+      return { ok: false, error: `Unsupported method for tm2 on ${this.chainId}` };
+    if (this.apiClient === undefined) return { ok: false, error: "No API client available" };
+    const client = this.apiClient;
+    return this.withRetry(async () => {
+      const apiUrl = await this.getHealthyApi();
+      return client.getSigningInfo(apiUrl, valconsAddr, undefined, height);
     });
   }
 
