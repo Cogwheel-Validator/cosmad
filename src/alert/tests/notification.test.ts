@@ -64,10 +64,41 @@ describe("buildNotification", () => {
   });
 
   test("falls back to the bare message when no context fields apply", () => {
-    const event: AlertEvent = { kind: "open", alert: alert("inactive"), context: {} };
+    const event: AlertEvent = { kind: "open", alert: alert("stalled"), context: {} };
 
     const notification = buildNotification(event, CHAIN_ID);
 
-    expect(notification.message).toBe("[celestia] Alert opened: inactive");
+    expect(notification.message).toBe("[celestia] Alert opened: stalled");
+  });
+
+  test("rpc_down names the endpoint and the reason", () => {
+    const down = new Alert({
+      alertId: "id",
+      chainId: CHAIN_ID,
+      alertType: "rpc_down",
+      subject: "https://rpc.example.com",
+      openedAt: new Date(),
+    });
+    const notification = buildNotification(
+      { kind: "open", alert: down, context: { reason: "unreachable: ECONNREFUSED" } },
+      CHAIN_ID,
+    );
+    expect(notification.message).toBe(
+      "[celestia] Alert opened: rpc_down https://rpc.example.com (unreachable: ECONNREFUSED)",
+    );
+  });
+
+  test("jailed / tombstoned / inactive say why the validator left the active set", () => {
+    const context: AlertContext = {
+      jailedUntil: new Date("2026-10-07T12:00:00.000Z"),
+      bondStatus: "BOND_STATUS_UNBONDING",
+    };
+    const msg = (type: string) =>
+      buildNotification({ kind: "open", alert: alert(type), context }, CHAIN_ID).message;
+    expect(msg("jailed")).toContain("validator jailed until 2026-10-07T12:00:00.000Z");
+    expect(msg("tombstoned")).toContain("tombstoned - permanently jailed");
+    expect(msg("inactive")).toContain(
+      "not jailed, but outside the active set (BOND_STATUS_UNBONDING)",
+    );
   });
 });

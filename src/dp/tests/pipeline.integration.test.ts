@@ -232,7 +232,7 @@ describe("ingest pipeline integration", () => {
     return result.getRows().map((row) => Number(row[0]));
   }
 
-  test("first poll seeds from the current tip only - no history backfill", async () => {
+  test("first poll seeds from the newest settled block (tip - 1) only - no history backfill", async () => {
     setTip(100);
     signedByHeight.set(100, true);
 
@@ -249,7 +249,7 @@ describe("ingest pipeline integration", () => {
     );
 
     const heights = await allBlockHeights();
-    expect(heights).toEqual([100]);
+    expect(heights).toEqual([99, 100]);
 
     const latest = await db.latestBlock(CHAIN_ID, "bft");
     assert(latest.ok);
@@ -276,7 +276,7 @@ describe("ingest pipeline integration", () => {
     );
 
     const heights = await allBlockHeights();
-    expect(heights).toEqual([100, 101, 102, 103, 104]);
+    expect(heights).toEqual([99, 100, 101, 102, 103, 104]);
 
     // Both RPC endpoints were used for the gap-fill commit fetches (round-robin spread).
     const commitCalls = vi
@@ -313,7 +313,7 @@ describe("ingest pipeline integration", () => {
     );
 
     const heights = await allBlockHeights();
-    expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108]);
+    expect(heights).toEqual([99, 100, 101, 102, 103, 104, 105, 106, 107, 108]);
 
     const unclosed = await db.getUnclosedAlerts(CHAIN_ID, 100, 1);
     assert(unclosed.ok);
@@ -342,7 +342,7 @@ describe("ingest pipeline integration", () => {
     );
 
     const heights = await allBlockHeights();
-    expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
+    expect(heights).toEqual([99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
 
     const unclosed = await db.getUnclosedAlerts(CHAIN_ID, 100, 1);
     assert(unclosed.ok);
@@ -372,7 +372,7 @@ describe("ingest pipeline integration", () => {
     );
 
     let heights = await allBlockHeights();
-    expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
+    expect(heights).toEqual([99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109]);
     const latestAfterNonCanonical = await db.latestBlock(CHAIN_ID, "bft");
     assert(latestAfterNonCanonical.ok);
     expect(latestAfterNonCanonical.value?.height).toBe(109n);
@@ -393,7 +393,7 @@ describe("ingest pipeline integration", () => {
     );
 
     heights = await allBlockHeights();
-    expect(heights).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
+    expect(heights).toEqual([99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
     const latest = await db.latestBlock(CHAIN_ID, "bft");
     assert(latest.ok);
     expect(latest.value?.height).toBe(110n);

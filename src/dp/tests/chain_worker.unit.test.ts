@@ -238,6 +238,20 @@ describe("commitToBlock - bft: no signature entry, disambiguated via active-set 
     expect(block.signed).toBe(0);
   });
 
+  test("fallback lookup failure uses the last known status when there is one (jailed -> -1)", async () => {
+    const getValidatorData = vi.fn().mockResolvedValue({ ok: false, error: "network error" });
+    const block = await commitToBlock(
+      bftCommit(null, 2),
+      bftChain(),
+      VALCONS_HEX,
+      undefined,
+      queryStub(getValidatorData),
+      { value: undefined, currentlyActive: false },
+      chainLog,
+    );
+    expect(block.signed).toBe(-1);
+  });
+
   test("the fallback cache is memoized - a second ambiguous block reuses the first lookup", async () => {
     const getValidatorData = vi.fn().mockResolvedValue({
       ok: true,
@@ -266,6 +280,39 @@ describe("commitToBlock - bft: no signature entry, disambiguated via active-set 
     );
 
     expect(getValidatorData).toHaveBeenCalledTimes(1);
+  });
+
+  test("a range crossing a jail is looked up until the answer matches the current status", async () => {
+    // Height 10: still active (a real miss). From 11 on: jailed, which is also the current status.
+    const getValidatorData = vi.fn(async (_addr: string, height?: number) => ({
+      ok: true,
+      data: {
+        validator:
+          (height ?? 0) >= 11
+            ? { jailed: true, status: "BOND_STATUS_UNBONDING" }
+            : { jailed: false, status: "BOND_STATUS_BONDED" },
+      },
+    }));
+    const query = queryStub(getValidatorData);
+    const cache = { value: undefined, currentlyActive: false };
+
+    const signed: number[] = [];
+    for (const height of [10, 11, 12, 13]) {
+      const block = await commitToBlock(
+        bftCommit(null, 2, height),
+        bftChain(),
+        VALCONS_HEX,
+        undefined,
+        query,
+        cache,
+        chainLog,
+      );
+      signed.push(block.signed);
+    }
+
+    expect(signed).toEqual([0, -1, -1, -1]);
+    // 10 (differs from the current status, not memoized), 11 (matches, memoized), 12-13 reuse it.
+    expect(getValidatorData).toHaveBeenCalledTimes(2);
   });
 });
 

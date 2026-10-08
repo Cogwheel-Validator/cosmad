@@ -1,7 +1,11 @@
 import type { AlertConfig } from "@/config/alert_types";
 import type { BlockWindowStats } from "@/pkgs/database/analytics";
 import { Alert, type Block } from "@/pkgs/database/tables";
-import type { AlertContext, AlertEvent } from "./types";
+import type { AlertContext, AlertEvent, EndpointCheck, ValidatorStatus } from "./types";
+
+/** Alert types describing why the validator is outside the active set - at most one is open. */
+const VALIDATOR_STATUS_ALERTS = ["inactive", "jailed", "tombstoned"] as const;
+type ValidatorStatusAlert = (typeof VALIDATOR_STATUS_ALERTS)[number];
 
 function blockContext(block: Block | undefined): AlertContext {
   if (block == null) return {};
@@ -9,6 +13,12 @@ function blockContext(block: Block | undefined): AlertContext {
 }
 
 type AlertConfigType = typeof AlertConfig.infer;
+
+/** The chain's newest block as reported by RPC, independent of what cosmad has stored. */
+export interface ChainTip {
+  height: bigint;
+  time: Date;
+}
 
 export class AlertEvaluator {
   constructor(
@@ -23,12 +33,14 @@ export class AlertEvaluator {
    *    number of blocks.
    * 3. Percentage missed blocks alert: checks if the percentage of missed blocks over the full
    *    signing window exceeds the specified threshold.
-   * 4. Check inactive: checks if the validator is inactive.
+   * 4. Validator status: checks if the validator is outside the active set, and why (inactive,
+   *    jailed or tombstoned).
    * @param tailBlocks a small trailing window (ascending height order, oldest first).
    * @param windowStats aggregate {total, missed} counts over the full signing window.
    * @param openAlerts a list of currently open alerts for this chain.
-   * @param validatorActive whether the validator is currently active.
-   * @param caughtUp if the cosmad has caught up to the chain's current tip.
+   * @param validatorStatus the validator's current status, undefined if it couldn't be
+   *    determined (bft only; always undefined for tm2) - status alerts are then left as they are.
+   * @param chainTip the chain's newest block as reported by RPC (drives the stalled check).
    * @returns a list of alert events to apply to the open alert state.
    */
   public evaluate(
@@ -36,36 +48,38 @@ export class AlertEvaluator {
     consecutiveMissThreshold: number,
     windowStats: BlockWindowStats,
     openAlerts: Alert[],
-    validatorActive: boolean,
-    caughtUp: boolean,
+    validatorStatus: ValidatorStatus | undefined,
+    chainTip: ChainTip,
   ): AlertEvent[] {
     const openByType = new Map(openAlerts.map((a) => [a.alertType, a]));
     const latestBlock = tailBlocks[tailBlocks.length - 1];
     return [
-      ...(caughtUp ? this.checkStalled(latestBlock, openByType) : []),
+      ...this.checkStalled(chainTip, openByType),
       ...this.checkConsecutiveMiss(tailBlocks.slice(-consecutiveMissThreshold), openByType),
       ...this.checkPercentageMiss(windowStats, latestBlock, openByType),
-      ...this.checkInactive(latestBlock, validatorActive, openByType),
+      ...this.checkValidatorStatus(validatorStatus, openByType),
     ];
   }
 
   /**
-   * Checks if the chain has been stalled (inactive for too long). Could be caused by
-   * node stopped working, or the chain has halted due to some unexpected condition.
-   * @param recentBlocks the most recent blocks, used to determine if the chain is stalled.
+   * Checks if the chain has been stalled (no new block for too long), e.g. a chain halt or the
+   * RPC nodes no longer following the chain.
+   * Judged from the chain's own tip time, not from cosmad's stored blocks: those lag behind
+   * (or don't exist yet on a fresh start, or are old while backfilling after downtime), and
+   * neither says anything about whether the chain itself is producing blocks.
+   * @param chainTip the chain's newest block as reported by RPC.
    * @param openByType a map of currently open alerts for this chain, by alertType.
    * @returns an array of alert events, including any open or closed stalled alerts.
    */
-  private checkStalled(latestBlock: Block, openByType: Map<string, Alert>): AlertEvent[] {
+  private checkStalled(chainTip: ChainTip, openByType: Map<string, Alert>): AlertEvent[] {
     const { stalledAlert } = this.cfg;
     if (!stalledAlert.enabled) return [];
 
     const existing = openByType.get("stalled");
-    const isStalled =
-      latestBlock == null ||
-      Date.now() - latestBlock.time.getTime() > stalledAlert.stalledThreshold * 1000;
+    const isStalled = Date.now() - chainTip.time.getTime() > stalledAlert.stalledThreshold * 1000;
     const context: AlertContext = {
-      ...blockContext(latestBlock),
+      latestBlockHeight: chainTip.height.toString(),
+      latestBlockTime: chainTip.time,
       threshold: stalledAlert.stalledThreshold,
     };
 
@@ -199,37 +213,101 @@ export class AlertEvaluator {
   }
 
   /**
-   * Checks if the validator is inactive (not active and no open alerts).
-   * @param validatorActive a bool that marks if validator is active or not
-   * @param openByType a map of currently open alerts for this chain, by alertType.
-   * @returns an array of alert events, including any open or closed inactive alerts.
+   * Keeps exactly one of the validator status alerts open while the validator is outside the
+   * active set, matching the reason:
+   *  - tombstoned: jailed permanently (double sign) - will never close on its own.
+   *  - jailed: jailed, can unjail after jailedUntil.
+   *  - inactive: not jailed, but not in the active set (outranked by stake / smaller set).
+   * A change of reason closes the old alert and opens the new one; rejoining closes it.
+   * Gated by alertIfInactive. An unknown status (REST API down) changes nothing.
    */
-  private checkInactive(
-    latestBlock: Block | undefined,
-    validatorActive: boolean,
+  private checkValidatorStatus(
+    status: ValidatorStatus | undefined,
     openByType: Map<string, Alert>,
   ): AlertEvent[] {
-    if (!this.cfg.alertIfInactive) return [];
+    if (!this.cfg.alertIfInactive || status == null) return [];
 
-    const existing = openByType.get("inactive");
-    const context = blockContext(latestBlock);
-    if (!validatorActive && existing == null) {
-      return [
-        {
+    let wanted: ValidatorStatusAlert | undefined;
+    if (!status.active) {
+      wanted = status.permanent ? "tombstoned" : status.jailed ? "jailed" : "inactive";
+    }
+    const context: AlertContext = {
+      latestBlockHeight: status.height.toString(),
+      latestBlockTime: status.time,
+      bondStatus: status.bondStatus,
+      ...(status.jailedUntil != null && !status.permanent
+        ? { jailedUntil: status.jailedUntil }
+        : {}),
+    };
+
+    const events: AlertEvent[] = [];
+    for (const type of VALIDATOR_STATUS_ALERTS) {
+      const existing = openByType.get(type);
+      if (existing != null && type !== wanted) {
+        events.push({ kind: "close", alert: existing, closedAt: new Date(), context });
+      }
+    }
+    if (wanted != null && openByType.get(wanted) == null) {
+      events.push({
+        kind: "open",
+        alert: new Alert({
+          alertId: Alert.generateId(),
+          chainId: this.chainId,
+          alertType: wanted,
+          openedAt: new Date(),
+        }),
+        context,
+      });
+    }
+    return events;
+  }
+
+  /**
+   * rpc_down / api_down: one alert per endpoint (the URL is the alert's subject), for endpoints
+   * configured with alertIfDown. Opens when the endpoint's last health check failed, closes once
+   * it passes again - or once the endpoint is no longer configured (with alertIfDown).
+   * @param endpoints every configured endpoint, with its last known health.
+   * @param openAlerts a list of currently open alerts for this chain.
+   */
+  public evaluateEndpoints(endpoints: EndpointCheck[], openAlerts: Alert[]): AlertEvent[] {
+    const events: AlertEvent[] = [];
+    const key = (type: string, url: string) => `${type} ${url}`;
+    const open = new Map(
+      openAlerts
+        .filter((a) => (a.alertType === "rpc_down" || a.alertType === "api_down") && a.subject)
+        .map((a) => [key(a.alertType, a.subject ?? ""), a]),
+    );
+
+    const configured = new Set<string>();
+    for (const endpoint of endpoints) {
+      const type = `${endpoint.kind}_down`;
+      const k = key(type, endpoint.url);
+      configured.add(k);
+      if (endpoint.alertIfDown && endpoint.healthy === undefined) continue; // not checked yet
+      const existing = open.get(k);
+      const context: AlertContext = endpoint.reason != null ? { reason: endpoint.reason } : {};
+      const down = endpoint.alertIfDown && endpoint.healthy === false;
+      if (down && existing == null) {
+        events.push({
           kind: "open",
           alert: new Alert({
             alertId: Alert.generateId(),
             chainId: this.chainId,
-            alertType: "inactive",
+            alertType: type,
+            subject: endpoint.url,
             openedAt: new Date(),
           }),
           context,
-        },
-      ];
+        });
+      } else if (!down && existing != null) {
+        events.push({ kind: "close", alert: existing, closedAt: new Date(), context });
+      }
     }
-    if (validatorActive && existing != null) {
-      return [{ kind: "close", alert: existing, closedAt: new Date(), context }];
+    // Endpoints removed from the config since the alert was opened.
+    for (const [k, alert] of open) {
+      if (!configured.has(k))
+        events.push({ kind: "close", alert, closedAt: new Date(), context: {} });
     }
-    return [];
+    return events;
   }
 }

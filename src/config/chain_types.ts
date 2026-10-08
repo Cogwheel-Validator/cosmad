@@ -22,6 +22,10 @@ const ChainConfigBase = type({
   // across many poll cycles instead of one giant fetch and dump into database.
   // Defaults to 100 if unset.
   "maxBlocksPerPoll?": "number.integer > 0",
+  // How often (seconds) every configured RPC/API endpoint is health checked. This is also the
+  // detection delay of rpc_down/api_down alerts for endpoints with alertIfDown set.
+  // Defaults to 60 if unset.
+  "healthCheckInterval?": "number > 0",
   // EXPERIMENTAL!
   // If a commit fetch permanently fails (exhausts its retries) partway through a poll's range,
   // the default behavior is to stop ingesting right before that height and retry it every

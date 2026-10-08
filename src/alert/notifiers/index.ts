@@ -95,6 +95,25 @@ function formatAlertDetails(alertType: string, context: AlertContext): string {
         details.push(`no new block seen in over ${context.threshold}s`);
       }
       break;
+    case "rpc_down":
+    case "api_down":
+      if (context.reason != null) details.push(context.reason);
+      break;
+    case "inactive":
+      details.push(
+        `not jailed, but outside the active set${context.bondStatus != null ? ` (${context.bondStatus})` : ""}`,
+      );
+      break;
+    case "jailed":
+      details.push(
+        context.jailedUntil != null
+          ? `validator jailed until ${context.jailedUntil.toISOString()}`
+          : "validator jailed",
+      );
+      break;
+    case "tombstoned":
+      details.push("validator tombstoned - permanently jailed, cannot unjail");
+      break;
   }
   if (context.latestBlockHeight != null) {
     const time =
@@ -107,6 +126,7 @@ function formatAlertDetails(alertType: string, context: AlertContext): string {
 export function buildNotification(event: AlertEvent, chainId: string): AlertNotification {
   const { alert, context } = event;
   const details = formatAlertDetails(alert.alertType, context);
+  const what = alert.subject != null ? `${alert.alertType} ${alert.subject}` : alert.alertType;
   switch (event.kind) {
     case "open":
       return {
@@ -115,7 +135,7 @@ export function buildNotification(event: AlertEvent, chainId: string): AlertNoti
         alertId: alert.alertId,
         kind: "opened",
         context,
-        message: `[${chainId}] Alert opened: ${alert.alertType}${details}`,
+        message: `[${chainId}] Alert opened: ${what}${details}`,
       };
     case "repeat":
       return {
@@ -124,7 +144,7 @@ export function buildNotification(event: AlertEvent, chainId: string): AlertNoti
         alertId: alert.alertId,
         kind: "repeat",
         context,
-        message: `[${chainId}] Alert still open (repeat #${alert.repeatCount + 1}): ${alert.alertType}${details}`,
+        message: `[${chainId}] Alert still open (repeat #${alert.repeatCount + 1}): ${what}${details}`,
       };
     case "close":
       return {
@@ -133,7 +153,7 @@ export function buildNotification(event: AlertEvent, chainId: string): AlertNoti
         alertId: alert.alertId,
         kind: "closed",
         context,
-        message: `[${chainId}] Alert closed: ${alert.alertType}${details}`,
+        message: `[${chainId}] Alert closed: ${what}${details}`,
       };
   }
 }
