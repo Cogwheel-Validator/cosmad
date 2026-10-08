@@ -1,6 +1,6 @@
 import type { Result } from "../models/result";
 import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "./analytics";
-import type { Alert, Block } from "./tables";
+import type { Alert, Block, ValidatorInactivity } from "./tables";
 
 // Interface for methods that provide read only access to the database.
 // Necessary for the databases where you need to read but not write.
@@ -14,6 +14,10 @@ export interface IReadDb {
   getDailySignedStats(days: number): Promise<Result<DailyBlockStats[], Error>>;
   getAlert(alertKey: string): Promise<Result<Alert | null, Error>>;
   getUnclosedAlerts(limit: number, page: number): Promise<Result<Alert[], Error>>;
+  // The ongoing validator inactivity period, if the validator is currently out of the active set.
+  getOpenInactivity(): Promise<Result<ValidatorInactivity | null, Error>>;
+  // Inactivity periods, newest first.
+  getInactivityHistory(limit: number): Promise<Result<ValidatorInactivity[], Error>>;
   close(): void;
 }
 
@@ -30,6 +34,13 @@ export interface IWriteDb extends IReadDb {
     alertId: string,
     notifiedAt: Date,
     repeatCount: number,
+  ): Promise<Result<void, Error>>;
+  // Start a validator inactivity period / end the one that started at startHeight.
+  insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>>;
+  endInactivity(
+    startHeight: bigint,
+    endHeight: bigint,
+    endTime: Date,
   ): Promise<Result<void, Error>>;
   // Close the database connection.
   close(): void;

@@ -5,7 +5,7 @@ import {
   DailyBlockStats,
 } from "../pkgs/database/analytics";
 import type { IApiReadDb, IWriteDb } from "../pkgs/database/interfaces";
-import type { Alert, Block } from "../pkgs/database/tables";
+import type { Alert, Block, ValidatorInactivity } from "../pkgs/database/tables";
 import type { Result } from "../pkgs/models/result";
 import {
   alertToWire,
@@ -15,10 +15,12 @@ import {
   type EngineRequestBody,
   type EngineResponse,
   type EngineRole,
+  inactivityToWire,
   type ResultOf,
   wireToAlert,
   wireToBlock,
   wireToChainSignatureStats,
+  wireToInactivity,
 } from "./protocol";
 import { onLines, sendLine } from "./socket";
 
@@ -220,6 +222,51 @@ export class EngineClient implements IWriteDb {
     });
     return toResult<"getBlockByRange", Block[]>(response, (value) =>
       value.map((v) => wireToBlock(v, this.chainType)),
+    );
+  }
+
+  public async insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>> {
+    const response = await this.connection.request({
+      type: "insertInactivity",
+      chainId: this.chainId,
+      period: inactivityToWire(period),
+    });
+    return toResult(response, () => undefined);
+  }
+
+  public async endInactivity(
+    startHeight: bigint,
+    endHeight: bigint,
+    endTime: Date,
+  ): Promise<Result<void, Error>> {
+    const response = await this.connection.request({
+      type: "endInactivity",
+      chainId: this.chainId,
+      startHeight: startHeight.toString(),
+      endHeight: endHeight.toString(),
+      endTime: endTime.toISOString(),
+    });
+    return toResult(response, () => undefined);
+  }
+
+  public async getOpenInactivity(): Promise<Result<ValidatorInactivity | null, Error>> {
+    const response = await this.connection.request({
+      type: "getOpenInactivity",
+      chainId: this.chainId,
+    });
+    return toResult<"getOpenInactivity", ValidatorInactivity | null>(response, (value) =>
+      value ? wireToInactivity(value) : null,
+    );
+  }
+
+  public async getInactivityHistory(limit: number): Promise<Result<ValidatorInactivity[], Error>> {
+    const response = await this.connection.request({
+      type: "getInactivityHistory",
+      chainId: this.chainId,
+      limit,
+    });
+    return toResult<"getInactivityHistory", ValidatorInactivity[]>(response, (value) =>
+      value.map(wireToInactivity),
     );
   }
 

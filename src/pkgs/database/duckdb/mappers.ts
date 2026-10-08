@@ -5,7 +5,7 @@ import {
   type DuckDBValue,
 } from "@duckdb/node-api";
 import { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
-import { Alert, Block } from "../tables";
+import { Alert, Block, ValidatorInactivity } from "../tables";
 
 export interface BlockRow {
   chainId: string;
@@ -108,4 +108,52 @@ export function rowToDailyBlockStats(data: Record<string, DuckDBValue>): DailyBl
   const day = data.day as DuckDBTimestampValue;
   const date = new Date(Number(day.micros) / 1000).toISOString().slice(0, 10);
   return new DailyBlockStats(date, Number(data.total as number), Number(data.missed as number));
+}
+
+function toTimestamp(date: Date): DuckDBTimestampValue {
+  return new DuckDBTimestampValue(BigInt(date.getTime()) * 1000n);
+}
+
+function fromTimestamp(value: DuckDBValue): Date {
+  return new Date(Number((value as DuckDBTimestampValue).micros) / 1000);
+}
+
+export interface ValidatorInactivityRow {
+  chainId: string;
+  height: bigint;
+  time: DuckDBTimestampValue;
+  jailed: boolean;
+  permanent: boolean;
+  bondStatus: string;
+  jailedUntil: DuckDBTimestampValue | null;
+  endHeight: bigint | null;
+  endTime: DuckDBTimestampValue | null;
+}
+
+export function inactivityToRow(period: ValidatorInactivity): ValidatorInactivityRow {
+  return {
+    chainId: period.chainId,
+    height: period.height,
+    time: toTimestamp(period.time),
+    jailed: period.jailed,
+    permanent: period.permanent,
+    bondStatus: period.bondStatus,
+    jailedUntil: period.jailedUntil != null ? toTimestamp(period.jailedUntil) : null,
+    endHeight: period.endHeight ?? null,
+    endTime: period.endTime != null ? toTimestamp(period.endTime) : null,
+  };
+}
+
+export function rowToInactivity(data: Record<string, DuckDBValue>): ValidatorInactivity {
+  return new ValidatorInactivity({
+    chainId: data.chain_id as string,
+    height: data.height as bigint,
+    time: fromTimestamp(data.time),
+    jailed: data.jailed as boolean,
+    permanent: data.permanent as boolean,
+    bondStatus: data.bond_status as string,
+    ...(data.jailed_until != null ? { jailedUntil: fromTimestamp(data.jailed_until) } : {}),
+    ...(data.end_height != null ? { endHeight: data.end_height as bigint } : {}),
+    ...(data.end_time != null ? { endTime: fromTimestamp(data.end_time) } : {}),
+  });
 }

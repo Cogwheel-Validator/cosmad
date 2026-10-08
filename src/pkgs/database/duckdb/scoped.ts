@@ -1,7 +1,7 @@
 import type { Result } from "../../models/result";
 import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
 import type { IWriteDb } from "../interfaces";
-import type { Alert, Block } from "../tables";
+import type { Alert, Block, ValidatorInactivity } from "../tables";
 import type { RWDB } from "./rw_db";
 
 /** Binds a chain ID to a shared RWDB, implementing IWriteDb for in-process (non-socket) callers. */
@@ -50,6 +50,26 @@ export class ChainScopedDb implements IWriteDb {
     repeatCount: number,
   ): Promise<Result<void, Error>> {
     return this.db.touchAlertNotified(alertId, notifiedAt, repeatCount);
+  }
+
+  public insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>> {
+    return this.db.insertInactivity(period);
+  }
+
+  public endInactivity(
+    startHeight: bigint,
+    endHeight: bigint,
+    endTime: Date,
+  ): Promise<Result<void, Error>> {
+    return this.db.endInactivity(this.chainId, startHeight, endHeight, endTime);
+  }
+
+  public getOpenInactivity(): Promise<Result<ValidatorInactivity | null, Error>> {
+    return this.db.getOpenInactivity(this.chainId);
+  }
+
+  public getInactivityHistory(limit: number): Promise<Result<ValidatorInactivity[], Error>> {
+    return this.db.getInactivityHistory(this.chainId, limit);
   }
 
   public getBlockByRange(startHeight: bigint, endHeight: bigint): Promise<Result<Block[], Error>> {

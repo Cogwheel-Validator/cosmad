@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { RWDB } from "../duckdb/rw_db";
-import { Alert, Block } from "../tables";
+import { Alert, Block, ValidatorInactivity } from "../tables";
 
 const testDir = join(tmpdir(), `cosmad_test_rw_${Date.now()}`);
 const chainId = "test";
@@ -428,6 +428,51 @@ describe("RWDB alerts", () => {
     const other = await db.getAlert(closedKey);
     assert(other.ok);
     expect(other.value?.closedAt?.toISOString()).toBe("2026-03-01T09:00:00.000Z");
+  });
+});
+
+describe("RWDB validator inactivity", () => {
+  const chain = "inactivity-chain";
+
+  test("no open period when nothing was recorded", async () => {
+    const r = await db.getOpenInactivity(chain);
+    assert(r.ok);
+    expect(r.value).toBeNull();
+  });
+
+  test("a period is recorded, read back as open, then ended", async () => {
+    const start = new ValidatorInactivity({
+      chainId: chain,
+      height: 100n,
+      time: new Date("2026-10-01T00:00:00.000Z"),
+      jailed: true,
+      permanent: false,
+      bondStatus: "BOND_STATUS_UNBONDING",
+      jailedUntil: new Date("2026-10-01T00:10:00.000Z"),
+    });
+    assert((await db.insertInactivity(start)).ok);
+
+    const open = await db.getOpenInactivity(chain);
+    assert(open.ok);
+    expect(open.value).toMatchObject({
+      height: 100n,
+      jailed: true,
+      permanent: false,
+      bondStatus: "BOND_STATUS_UNBONDING",
+    });
+    expect(open.value?.jailedUntil?.toISOString()).toBe("2026-10-01T00:10:00.000Z");
+    expect(open.value?.endHeight).toBeUndefined();
+
+    assert((await db.endInactivity(chain, 100n, 150n, new Date("2026-10-01T00:20:00.000Z"))).ok);
+    const after = await db.getOpenInactivity(chain);
+    assert(after.ok);
+    expect(after.value).toBeNull();
+
+    const history = await db.getInactivityHistory(chain, 10);
+    assert(history.ok);
+    expect(history.value).toHaveLength(1);
+    expect(history.value[0]?.endHeight).toBe(150n);
+    expect(history.value[0]?.endTime?.toISOString()).toBe("2026-10-01T00:20:00.000Z");
   });
 });
 

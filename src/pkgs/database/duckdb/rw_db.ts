@@ -7,9 +7,10 @@ import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../
 import type { IWriteDb } from "../interfaces";
 import { generateCreateTableStatements } from "../sql/generate";
 import type { Constructor } from "../sql/types";
-import { Alert, Block } from "../tables";
+import { Alert, Block, ValidatorInactivity } from "../tables";
 import * as alertQueries from "./queries/alerts";
 import * as blockQueries from "./queries/blocks";
+import * as inactivityQueries from "./queries/inactivity";
 import { ChainScopedDb } from "./scoped";
 
 export interface DuckDbOptions {
@@ -78,7 +79,7 @@ export class RWDB {
 
   // initSchema initialises the database schema
   private async initSchema(): Promise<void> {
-    const tables: Constructor[] = [Block, Alert] as unknown as Constructor[];
+    const tables: Constructor[] = [Block, Alert, ValidatorInactivity] as unknown as Constructor[];
     for (const table of tables) {
       for (const stmt of generateCreateTableStatements(table)) {
         await this.conn.run(stmt);
@@ -152,6 +153,37 @@ export class RWDB {
     repeatCount: number,
   ): Promise<Result<void, Error>> {
     return alertQueries.touchAlertNotified(this.conn, this.log, alertId, notifiedAt, repeatCount);
+  }
+
+  public insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>> {
+    return inactivityQueries.insertInactivity(this.conn, this.log, period);
+  }
+
+  public endInactivity(
+    chainId: string,
+    startHeight: bigint,
+    endHeight: bigint,
+    endTime: Date,
+  ): Promise<Result<void, Error>> {
+    return inactivityQueries.endInactivity(
+      this.conn,
+      this.log,
+      chainId,
+      startHeight,
+      endHeight,
+      endTime,
+    );
+  }
+
+  public getOpenInactivity(chainId: string): Promise<Result<ValidatorInactivity | null, Error>> {
+    return inactivityQueries.getOpenInactivity(this.nextReadConn(), this.log, chainId);
+  }
+
+  public getInactivityHistory(
+    chainId: string,
+    limit: number,
+  ): Promise<Result<ValidatorInactivity[], Error>> {
+    return inactivityQueries.getInactivityHistory(this.nextReadConn(), this.log, chainId, limit);
   }
 
   public getChainSignedPercentage(

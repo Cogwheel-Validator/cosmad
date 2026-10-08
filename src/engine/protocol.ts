@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/suspicious/noConfusingVoidType: <result requires void since we are mapping the result to a response> */
 import { ChainSignatureStats } from "../pkgs/database/analytics";
-import { Alert, Block } from "../pkgs/database/tables";
+import { Alert, Block, ValidatorInactivity } from "../pkgs/database/tables";
 
 /**
  * JSON-safe wire shapes for Block/Alert, since JSON can't carry bigint, Buffer,
@@ -97,6 +97,47 @@ export function wireToAlert(wire: WireAlert): Alert {
   });
 }
 
+/** WireInactivity is the JSON-safe wire shape for a ValidatorInactivity. */
+export interface WireInactivity {
+  chainId: string;
+  height: string;
+  time: string;
+  jailed: boolean;
+  permanent: boolean;
+  bondStatus: string;
+  jailedUntil?: string;
+  endHeight?: string;
+  endTime?: string;
+}
+
+export function inactivityToWire(period: ValidatorInactivity): WireInactivity {
+  return {
+    chainId: period.chainId,
+    height: period.height.toString(),
+    time: period.time.toISOString(),
+    jailed: period.jailed,
+    permanent: period.permanent,
+    bondStatus: period.bondStatus,
+    ...(period.jailedUntil != null ? { jailedUntil: period.jailedUntil.toISOString() } : {}),
+    ...(period.endHeight != null ? { endHeight: period.endHeight.toString() } : {}),
+    ...(period.endTime != null ? { endTime: period.endTime.toISOString() } : {}),
+  };
+}
+
+export function wireToInactivity(wire: WireInactivity): ValidatorInactivity {
+  return new ValidatorInactivity({
+    chainId: wire.chainId,
+    height: BigInt(wire.height),
+    time: new Date(wire.time),
+    jailed: wire.jailed,
+    permanent: wire.permanent,
+    bondStatus: wire.bondStatus,
+    ...(wire.jailedUntil != null ? { jailedUntil: new Date(wire.jailedUntil) } : {}),
+    ...(wire.endHeight != null ? { endHeight: BigInt(wire.endHeight) } : {}),
+    ...(wire.endTime != null ? { endTime: new Date(wire.endTime) } : {}),
+  });
+}
+
 /** WireChainSignatureStats is the JSON-safe wire shape for a ChainSignatureStats - already
  * plain numbers/strings, so it's a straight field-for-field mirror. */
 export interface WireChainSignatureStats {
@@ -135,6 +176,13 @@ export interface EngineOps {
     params: { chainId: string; alertId: string; notifiedAt: string; repeatCount: number };
     result: void;
   };
+  insertInactivity: { params: { chainId: string; period: WireInactivity }; result: void };
+  endInactivity: {
+    params: { chainId: string; startHeight: string; endHeight: string; endTime: string };
+    result: void;
+  };
+  getOpenInactivity: { params: { chainId: string }; result: WireInactivity | null };
+  getInactivityHistory: { params: { chainId: string; limit: number }; result: WireInactivity[] };
   getBlockByHeight: {
     params: { chainId: string; blockHeight: string; chainType: chainType };
     result: WireBlock | null;
@@ -180,6 +228,8 @@ export const WRITE_REQUEST_TYPES: ReadonlySet<EngineRequestBody["type"]> = new S
   "insertAlert",
   "closeAlert",
   "touchAlertNotified",
+  "insertInactivity",
+  "endInactivity",
 ]);
 
 export interface EngineRequest {

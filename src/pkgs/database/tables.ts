@@ -167,3 +167,70 @@ export class Alert {
     return randomUUID();
   }
 }
+
+interface ValidatorInactivityOptions {
+  chainId: string;
+  height: bigint;
+  time: Date;
+  jailed: boolean;
+  permanent: boolean;
+  bondStatus: string;
+  jailedUntil?: Date;
+  endHeight?: bigint;
+  endTime?: Date;
+}
+
+/**
+ * One period during which the tracked validator was outside the active set, and why.
+ * - jailed = false, permanent = false: not jailed, simply not in the active set (outranked by
+ *   stake, or the active set size was lowered).
+ * - jailed = true, permanent = false: jailed (e.g. downtime), can unjail after jailedUntil.
+ * - jailed = true, permanent = true: tombstoned (double sign), jailed forever.
+ * A new period starts whenever the reason changes (e.g. a jailed validator getting tombstoned).
+ * endHeight/endTime stay null while the period is ongoing.
+ */
+@Table("validator_inactivity")
+export class ValidatorInactivity {
+  @Column({ name: "chain_id", type: AllowedTypes.TEXT, primary: true, nullable: false })
+  chainId: string;
+
+  // Height at which cosmad observed this state (the chain tip of that poll).
+  @Column({ name: "height", type: AllowedTypes.UBIGINT, primary: true, nullable: false })
+  height: bigint;
+
+  // Block time of `height`.
+  @Column({ name: "time", type: AllowedTypes.TIMESTAMP, nullable: false })
+  time: Date;
+
+  @Column({ name: "jailed", type: AllowedTypes.BOOLEAN, nullable: false })
+  jailed: boolean;
+
+  // Tombstoned - the validator can never unjail.
+  @Column({ name: "permanent", type: AllowedTypes.BOOLEAN, nullable: false })
+  permanent: boolean;
+
+  // BOND_STATUS_UNBONDING / BOND_STATUS_UNBONDED / ...
+  @Column({ name: "bond_status", type: AllowedTypes.TEXT, nullable: false })
+  bondStatus: string;
+
+  @Column({ name: "jailed_until", type: AllowedTypes.TIMESTAMP, nullable: true })
+  jailedUntil?: Date;
+
+  @Column({ name: "end_height", type: AllowedTypes.UBIGINT, nullable: true })
+  endHeight?: bigint;
+
+  @Column({ name: "end_time", type: AllowedTypes.TIMESTAMP, nullable: true })
+  endTime?: Date;
+
+  constructor(options: ValidatorInactivityOptions) {
+    this.chainId = options.chainId;
+    this.height = options.height;
+    this.time = options.time;
+    this.jailed = options.jailed;
+    this.permanent = options.permanent;
+    this.bondStatus = options.bondStatus;
+    if (options.jailedUntil !== undefined) this.jailedUntil = options.jailedUntil;
+    if (options.endHeight !== undefined) this.endHeight = options.endHeight;
+    if (options.endTime !== undefined) this.endTime = options.endTime;
+  }
+}

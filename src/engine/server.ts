@@ -13,9 +13,11 @@ import {
   type EngineResponse,
   type EngineRole,
   type HelloMessage,
+  inactivityToWire,
   WRITE_REQUEST_TYPES,
   wireToAlert,
   wireToBlock,
+  wireToInactivity,
 } from "./protocol";
 import { onLines, sendLine } from "./socket";
 
@@ -67,6 +69,17 @@ const handlers: Handlers = {
   closeAlert: (p, { db }) => db.closeAlert(p.alertId, new Date(p.closedAt)),
   touchAlertNotified: (p, { db }) =>
     db.touchAlertNotified(p.alertId, new Date(p.notifiedAt), p.repeatCount),
+  insertInactivity: (p, { db }) => db.insertInactivity(wireToInactivity(p.period)),
+  endInactivity: (p, { db }) =>
+    db.endInactivity(p.chainId, BigInt(p.startHeight), BigInt(p.endHeight), new Date(p.endTime)),
+  getOpenInactivity: async (p, { db }) => {
+    const r = await db.getOpenInactivity(p.chainId);
+    return r.ok ? { ok: true, value: r.value ? inactivityToWire(r.value) : null } : r;
+  },
+  getInactivityHistory: async (p, { db }) => {
+    const r = await db.getInactivityHistory(p.chainId, p.limit);
+    return r.ok ? { ok: true, value: r.value.map(inactivityToWire) } : r;
+  },
   getBlockByHeight: async (p, { db, chainType }) => {
     const r = await db.getBlockByHeight(p.chainId, BigInt(p.blockHeight), chainType);
     return r.ok ? { ok: true, value: r.value ? blockToWire(r.value, chainType) : null } : r;
