@@ -22,6 +22,7 @@ export interface WireAlert {
   alertId: string;
   chainId: string;
   alertType: string;
+  subject?: string;
   openedAt: string;
   closedAt?: string;
   lastNotifiedAt?: string;
@@ -72,6 +73,7 @@ export function alertToWire(alert: Alert): WireAlert {
     alertId: alert.alertId,
     chainId: alert.chainId,
     alertType: alert.alertType,
+    ...(alert.subject != null ? { subject: alert.subject } : {}),
     openedAt: alert.openedAt.toISOString(),
     ...(alert.closedAt != null ? { closedAt: alert.closedAt.toISOString() } : {}),
     ...(alert.lastNotifiedAt != null ? { lastNotifiedAt: alert.lastNotifiedAt.toISOString() } : {}),
@@ -87,6 +89,7 @@ export function wireToAlert(wire: WireAlert): Alert {
     alertId: wire.alertId,
     chainId: wire.chainId,
     alertType: wire.alertType,
+    ...(wire.subject != null ? { subject: wire.subject } : {}),
     openedAt: new Date(wire.openedAt),
     repeatCount: wire.repeatCount,
     ...(wire.closedAt != null ? { closedAt: new Date(wire.closedAt) } : {}),

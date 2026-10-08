@@ -1,7 +1,8 @@
 import assert from "node:assert";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { RWDB } from "../duckdb/rw_db";
 import { Alert, Block } from "../tables";
@@ -427,5 +428,47 @@ describe("RWDB alerts", () => {
     const other = await db.getAlert(closedKey);
     assert(other.ok);
     expect(other.value?.closedAt?.toISOString()).toBe("2026-03-01T09:00:00.000Z");
+  });
+});
+
+describe("RWDB schema evolution", () => {
+  test("an alerts table from before the subject column gets it added on startup", async () => {
+    const oldDir = join(tmpdir(), `cosmad_test_rw_old_${Date.now()}`);
+    mkdirSync(oldDir, { recursive: true });
+    // Schema as created by earlier cosmad versions.
+    const instance = await DuckDBInstance.create(`${oldDir}/cosmad.duckdb`);
+    const conn = await instance.connect();
+    await conn.run(`CREATE TABLE alerts (
+      alert_id VARCHAR(64) NOT NULL PRIMARY KEY, chain_id TEXT NOT NULL, alert_type TEXT NOT NULL,
+      opened_at TIMESTAMP NOT NULL, closed_at TIMESTAMP, last_notified_at TIMESTAMP,
+      repeat_count INT4 NOT NULL DEFAULT 0)`);
+    await conn.run(
+      "INSERT INTO alerts VALUES ('old-alert', 'c', 'stalled', TIMESTAMP '2026-01-01 00:00:00', NULL, NULL, 0)",
+    );
+    conn.closeSync();
+    instance.closeSync();
+
+    const upgraded = await RWDB.create(oldDir, { threads: "1", memoryLimit: "256MB" });
+    try {
+      const old = await upgraded.getAlert("old-alert");
+      assert(old.ok);
+      expect(old.value?.alertType).toBe("stalled");
+      expect(old.value?.subject).toBeUndefined();
+
+      const fresh = new Alert({
+        alertId: "new-alert",
+        chainId: "c",
+        alertType: "rpc_down",
+        subject: "https://rpc.example.com",
+        openedAt: new Date(),
+      });
+      assert((await upgraded.insertAlert(fresh)).ok);
+      const read = await upgraded.getAlert("new-alert");
+      assert(read.ok);
+      expect(read.value?.subject).toBe("https://rpc.example.com");
+    } finally {
+      upgraded.close();
+      rmSync(oldDir, { recursive: true, force: true });
+    }
   });
 });

@@ -19,13 +19,14 @@ export async function insertAlert(
   const row = alertToRow(alert);
   const sql = `
     INSERT INTO alerts
-      (alert_id, chain_id, alert_type, opened_at, closed_at, last_notified_at, repeat_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+      (alert_id, chain_id, alert_type, subject, opened_at, closed_at, last_notified_at, repeat_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const values = [
     row.alertId,
     row.chainId,
     row.alertType,
+    row.subject,
     row.openedAt,
     row.closedAt,
     row.lastNotifiedAt,
@@ -51,6 +52,7 @@ export async function getAlert(
       alert_id,
       chain_id,
       alert_type,
+      subject,
       opened_at,
       closed_at,
       last_notified_at,
@@ -83,6 +85,7 @@ export async function getUnclosedAlerts(
       alert_id,
       chain_id,
       alert_type,
+      subject,
       opened_at,
       closed_at,
       last_notified_at,

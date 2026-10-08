@@ -97,6 +97,7 @@ interface AlertOptions {
   alertId: string;
   chainId: string;
   alertType: string;
+  subject?: string;
   openedAt: Date;
   closedAt?: Date;
   lastNotifiedAt?: Date;
@@ -119,6 +120,11 @@ export class Alert {
 
   @Column({ name: "alert_type", type: AllowedTypes.TEXT, nullable: false })
   alertType: string;
+
+  // What the alert is about, for alert types that can be open several times at once - e.g. the
+  // endpoint URL of an rpc_down/api_down alert. Null for chain-wide alerts.
+  @Column({ name: "subject", type: AllowedTypes.TEXT, nullable: true })
+  subject?: string;
 
   @Column({ name: "opened_at", type: AllowedTypes.TIMESTAMP, nullable: false })
   openedAt: Date;
@@ -143,6 +149,9 @@ export class Alert {
     this.alertType = options.alertType;
     this.openedAt = options.openedAt;
     this.repeatCount = options.repeatCount ?? 0;
+    if (options.subject !== undefined) {
+      this.subject = options.subject;
+    }
     if (options.closedAt !== undefined) {
       this.closedAt = options.closedAt;
     }

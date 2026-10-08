@@ -10,6 +10,9 @@ export interface AlertJson {
   alertId: string;
   chainId: string;
   alertType: string;
+  // What the alert is about when the type alone isn't enough (the endpoint URL of an
+  // rpc_down/api_down alert), null otherwise.
+  subject: string | null;
   openedAt: string;
   closedAt: string | null;
 }

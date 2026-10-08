@@ -91,7 +91,16 @@ onUnmounted(() => es?.close());
         :key="alert.alertId"
         class="px-4 py-2.5 flex items-center justify-between gap-2 hover:bg-base-200/50"
       >
-        <div class="text-sm font-mono text-error">{{ alert.alertType }}</div>
+        <div class="min-w-0">
+          <div class="text-sm font-mono text-error">{{ alert.alertType }}</div>
+          <div
+            v-if="alert.subject"
+            class="text-[11px] font-mono text-base-content/60 truncate"
+            :title="alert.subject"
+          >
+            {{ alert.subject }}
+          </div>
+        </div>
         <time class="text-[11px] text-base-content/60 whitespace-nowrap" :title="alert.openedAt">
           {{ relativeTime(alert.openedAt) }}
         </time>

@@ -54,5 +54,18 @@ export function generateCreateTableStatements(target: Constructor): string[] {
         `CREATE INDEX IF NOT EXISTS idx_${tableName}_${col.propertyKey} ON ${tableName}(${col.name})`,
     );
 
-  return [tableStmt, ...indexStmts];
+  // Additive schema evolution for databases created by an older version: a column added later
+  // to the class is added to the existing table too. Only possible for columns an existing row
+  // can satisfy (nullable or defaulted) - NOT NULL columns without a default must exist from
+  // the start. Idempotent like everything above.
+  const addColumnStmts = columns
+    .filter((col) => !col.primary && (col.nullable || col.default != null))
+    .map((col) => {
+      let def = `${col.name} ${col.type}`;
+      if (col.type === AllowedTypes.VARCHAR) def += `(${col.varcharLen})`;
+      if (col.default) def += ` DEFAULT ${col.default}`;
+      return `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${def}`;
+    });
+
+  return [tableStmt, ...addColumnStmts, ...indexStmts];
 }

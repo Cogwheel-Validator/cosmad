@@ -29,6 +29,7 @@ const alertSchema = type({
   chainId: "string",
   alertId: "string.uuid.v4",
   alertType: "string",
+  subject: "string | null",
   openedAt: "string.date",
   closedAt: "string.date | null",
 });

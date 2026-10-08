@@ -13,6 +13,9 @@ export interface AlertJson {
   alertId: string;
   chainId: string;
   alertType: string;
+  // What the alert is about when the type alone isn't enough (the endpoint URL of an
+  // rpc_down/api_down alert), null otherwise.
+  subject: string | null;
   openedAt: string;
   closedAt: string | null;
 }
@@ -41,6 +44,7 @@ export function serializeAlert(alert: Alert): AlertJson {
     alertId: alert.alertId,
     chainId: alert.chainId,
     alertType: alert.alertType,
+    subject: alert.subject ?? null,
     openedAt: alert.openedAt.toISOString(),
     closedAt: alert.closedAt?.toISOString() ?? null,
   };

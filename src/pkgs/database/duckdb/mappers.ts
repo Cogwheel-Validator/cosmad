@@ -44,6 +44,7 @@ export interface AlertRow {
   alertId: string;
   chainId: string;
   alertType: string;
+  subject: string | null;
   openedAt: DuckDBTimestampValue;
   closedAt: DuckDBTimestampValue | null;
   lastNotifiedAt: DuckDBTimestampValue | null;
@@ -55,6 +56,7 @@ export function alertToRow(alert: Alert): AlertRow {
     alertId: alert.alertId,
     chainId: alert.chainId,
     alertType: alert.alertType,
+    subject: alert.subject ?? null,
     openedAt: new DuckDBTimestampValue(BigInt(alert.openedAt.getTime()) * 1000n),
     closedAt:
       alert.closedAt != null
@@ -75,6 +77,7 @@ export function rowToAlert(data: Record<string, DuckDBValue>): Alert {
     alertType: data.alert_type as string,
     openedAt: new Date(Number((data.opened_at as DuckDBTimestampValue).micros) / 1000),
     repeatCount: Number(data.repeat_count as number),
+    ...(data.subject != null ? { subject: data.subject as string } : {}),
     ...(data.closed_at != null
       ? { closedAt: new Date(Number((data.closed_at as DuckDBTimestampValue).micros) / 1000) }
       : {}),
