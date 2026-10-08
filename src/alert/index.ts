@@ -20,7 +20,17 @@ export interface ChainTip {
   time: Date;
 }
 
+/** Default of AlertConfig.endpointDownAlertAfter (seconds). */
+const DEFAULT_ENDPOINT_DOWN_ALERT_AFTER = 180;
+
 export class AlertEvaluator {
+  /**
+   * When each endpoint (keyed as in evaluateEndpoints) was first seen unhealthy in its current
+   * outage. In memory only: after a restart the grace period starts over, while alerts that were
+   * already open stay open until the endpoint recovers.
+   */
+  private endpointDownSince = new Map<string, number>();
+
   constructor(
     private chainId: string,
     private cfg: AlertConfigType,
@@ -264,12 +274,20 @@ export class AlertEvaluator {
 
   /**
    * rpc_down / api_down: one alert per endpoint (the URL is the alert's subject), for endpoints
-   * configured with alertIfDown. Opens when the endpoint's last health check failed, closes once
-   * it passes again - or once the endpoint is no longer configured (with alertIfDown).
+   * configured with alertIfDown. Opens once the endpoint has been unhealthy for
+   * endpointDownAlertAfter seconds in a row, closes once it passes a health check again - or once
+   * the endpoint is no longer configured (with alertIfDown).
    * @param endpoints every configured endpoint, with its last known health.
    * @param openAlerts a list of currently open alerts for this chain.
+   * @param now evaluation time (injectable for tests).
    */
-  public evaluateEndpoints(endpoints: EndpointCheck[], openAlerts: Alert[]): AlertEvent[] {
+  public evaluateEndpoints(
+    endpoints: EndpointCheck[],
+    openAlerts: Alert[],
+    now: Date = new Date(),
+  ): AlertEvent[] {
+    const alertAfterMs =
+      (this.cfg.endpointDownAlertAfter ?? DEFAULT_ENDPOINT_DOWN_ALERT_AFTER) * 1000;
     const events: AlertEvent[] = [];
     const key = (type: string, url: string) => `${type} ${url}`;
     const open = new Map(
@@ -287,7 +305,10 @@ export class AlertEvaluator {
       const existing = open.get(k);
       const context: AlertContext = endpoint.reason != null ? { reason: endpoint.reason } : {};
       const down = endpoint.alertIfDown && endpoint.healthy === false;
-      if (down && existing == null) {
+      if (!down) this.endpointDownSince.delete(k);
+      else if (!this.endpointDownSince.has(k)) this.endpointDownSince.set(k, now.getTime());
+      const downFor = now.getTime() - (this.endpointDownSince.get(k) ?? now.getTime());
+      if (down && existing == null && downFor >= alertAfterMs) {
         events.push({
           kind: "open",
           alert: new Alert({
@@ -295,18 +316,20 @@ export class AlertEvaluator {
             chainId: this.chainId,
             alertType: type,
             subject: endpoint.url,
-            openedAt: new Date(),
+            openedAt: now,
           }),
           context,
         });
       } else if (!down && existing != null) {
-        events.push({ kind: "close", alert: existing, closedAt: new Date(), context });
+        events.push({ kind: "close", alert: existing, closedAt: now, context });
       }
     }
     // Endpoints removed from the config since the alert was opened.
     for (const [k, alert] of open) {
-      if (!configured.has(k))
-        events.push({ kind: "close", alert, closedAt: new Date(), context: {} });
+      if (!configured.has(k)) events.push({ kind: "close", alert, closedAt: now, context: {} });
+    }
+    for (const k of this.endpointDownSince.keys()) {
+      if (!configured.has(k)) this.endpointDownSince.delete(k);
     }
     return events;
   }

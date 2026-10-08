@@ -28,6 +28,7 @@ export interface HarnessOptions extends FakeChainOptions {
 
 const DEFAULT_ALERT_CONFIG: AlertConfigType = {
   alertIfInactive: true,
+  endpointDownAlertAfter: 0, // alert on the first failed check, so scenarios run quickly
   signingWindowSize: 20,
   stalledAlert: { enabled: true, stalledThreshold: 60 },
   consecutiveMissAlert: { enabled: true, threshold: 3, repeat: false, repeatInterval: 3600 },

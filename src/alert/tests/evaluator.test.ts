@@ -169,7 +169,8 @@ describe("AlertEvaluator validator status alerts", () => {
 });
 
 describe("AlertEvaluator.evaluateEndpoints", () => {
-  const evaluator = () => new AlertEvaluator(CHAIN_ID, baseConfig());
+  const evaluator = (endpointDownAlertAfter = 0) =>
+    new AlertEvaluator(CHAIN_ID, { ...baseConfig(), endpointDownAlertAfter });
   const rpc = (url: string, healthy: boolean | undefined, alertIfDown = true) => ({
     kind: "rpc" as const,
     url,
@@ -205,6 +206,31 @@ describe("AlertEvaluator.evaluateEndpoints", () => {
     expect(events.map((e) => `${e.kind}:${e.alert.subject}`)).toEqual([
       "close:http://a",
       "close:http://gone",
+    ]);
+  });
+
+  test("waits endpointDownAlertAfter of continuous failure before opening", () => {
+    const ev = evaluator(180);
+    const at = (s: number) => new Date(1_000_000 + s * 1000);
+    const run = (healthy: boolean, s: number) =>
+      ev.evaluateEndpoints([rpc("http://a", healthy)], [], at(s)).map((e) => e.kind);
+
+    expect(run(false, 0)).toEqual([]);
+    expect(run(false, 179)).toEqual([]);
+    // Recovery resets the timer.
+    expect(run(true, 200)).toEqual([]);
+    expect(run(false, 300)).toEqual([]);
+    expect(run(false, 479)).toEqual([]);
+    expect(run(false, 480)).toEqual(["open"]);
+  });
+
+  test("defaults to 3 minutes when unset", () => {
+    const ev = new AlertEvaluator(CHAIN_ID, baseConfig());
+    const t0 = new Date(1_000_000);
+    expect(ev.evaluateEndpoints([rpc("http://a", false)], [], t0)).toEqual([]);
+    const t1 = new Date(t0.getTime() + 180_000);
+    expect(ev.evaluateEndpoints([rpc("http://a", false)], [], t1).map((e) => e.kind)).toEqual([
+      "open",
     ]);
   });
 });

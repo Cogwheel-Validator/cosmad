@@ -22,8 +22,9 @@ const ChainConfigBase = type({
   // across many poll cycles instead of one giant fetch and dump into database.
   // Defaults to 100 if unset.
   "maxBlocksPerPoll?": "number.integer > 0",
-  // How often (seconds) every configured RPC/API endpoint is health checked. This is also the
-  // detection delay of rpc_down/api_down alerts for endpoints with alertIfDown set.
+  // How often (seconds) every configured RPC/API endpoint is health checked. An endpoint's outage
+  // is noticed at its next check; rpc_down/api_down then waits for
+  // alertConfig.endpointDownAlertAfter before alerting.
   // Defaults to 60 if unset.
   "healthCheckInterval?": "number > 0",
   // EXPERIMENTAL!

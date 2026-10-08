@@ -34,6 +34,13 @@ export const AlertConfig = type({
   // Send alert if the validator is in the inactive set, jailed or tombstoned.
   alertIfInactive: "boolean",
 
+  // How long (seconds) an RPC/API endpoint configured with alertIfDown must stay continuously
+  // unhealthy before rpc_down/api_down is raised, so a single timeout or a short restart doesn't
+  // page anyone. 0 alerts on the first failed health check. Defaults to 180 (3 minutes) if unset.
+  // Detection still happens on health checks, so the effective delay can be up to one
+  // healthCheckInterval longer.
+  "endpointDownAlertAfter?": "number >= 0",
+
   // Number of trailing blocks to use as the sliding signing window for
   // percentageMissedBlocksAlert evaluation.
   // It is optional for bft chains since this is normally fetched
