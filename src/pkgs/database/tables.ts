@@ -9,6 +9,7 @@ interface BlockOptions {
   time: Date;
   signed: number;
   signature: string | Buffer | undefined;
+  precommitted?: boolean | undefined;
   chainType: "bft" | "tm2";
 }
 
@@ -32,6 +33,10 @@ export class Block {
 
   @Column({ name: "signature", type: AllowedTypes.BYTEA, nullable: true })
   signature: Buffer | undefined;
+
+  // Whether the block was precommitted or not. It is null if there was no signature.
+  @Column({ name: "precommitted", type: AllowedTypes.BOOLEAN, nullable: true })
+  precommitted?: boolean;
 
   chainType: "bft" | "tm2";
 
@@ -73,6 +78,9 @@ export class Block {
     this.time = options.time;
     this.signed = this.numCheck(options);
     this.signature = this.signatureFn(options);
+    if (options.precommitted !== undefined) {
+      this.precommitted = options.precommitted;
+    }
   }
 
   // blockSignature returns a base64 representation of the signature, if it exists

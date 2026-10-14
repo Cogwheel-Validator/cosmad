@@ -23,6 +23,7 @@ const blockSchema = type({
   time: "string",
   signed: "number",
   signature: "string | null",
+  precommitted: "boolean | null",
 });
 const errorSchema = type({ error: "string" });
 

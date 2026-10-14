@@ -15,6 +15,7 @@ export interface WireBlock {
   time: string;
   signed: number;
   signature?: string;
+  precommitted?: boolean;
 }
 
 /** WireAlert is the JSON-safe wire shape for an Alert. */
@@ -46,6 +47,7 @@ export function blockToWire(block: Block, chainType: "bft" | "tm2"): WireBlock {
     time: block.time.toISOString(),
     signed: block.signed,
     ...(block.signature != null ? { signature: block.signature.toString("base64") } : {}),
+    ...(block.precommitted != null ? { precommitted: block.precommitted } : {}),
   };
 }
 
@@ -62,6 +64,7 @@ export function wireToBlock(wire: WireBlock, chainType: "bft" | "tm2"): Block {
     signed: wire.signed,
     chainType: chainType,
     signature: signature,
+    ...(wire.precommitted != null ? { precommitted: wire.precommitted } : {}),
   });
 }
 

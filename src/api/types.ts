@@ -7,6 +7,7 @@ export interface BlockJson {
   time: string;
   signed: number;
   signature: string | null;
+  precommitted: boolean | null;
 }
 
 export interface AlertJson {
@@ -36,6 +37,7 @@ export function serializeBlock(block: Block): BlockJson {
     time: block.time.toISOString(),
     signed: block.signed,
     signature: block.signature?.toString("hex") ?? null,
+    precommitted: block.precommitted ?? null,
   };
 }
 

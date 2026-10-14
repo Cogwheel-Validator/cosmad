@@ -14,6 +14,7 @@ export interface BlockRow {
   time: DuckDBTimestampValue;
   signed: number;
   signature: DuckDBBlobValue | null;
+  precommitted: boolean | null;
 }
 
 export function blockToRow(block: Block): BlockRow {
@@ -24,6 +25,7 @@ export function blockToRow(block: Block): BlockRow {
     time: new DuckDBTimestampValue(BigInt(block.time.getTime()) * 1000n),
     signed: block.signed,
     signature: block.signature != null ? new DuckDBBlobValue(block.signature) : null,
+    precommitted: block.precommitted ?? null,
   };
 }
 
@@ -37,6 +39,7 @@ export function rowToBlock(data: Record<string, DuckDBValue>, chainType: "bft" |
     signature:
       data.signature != null ? Buffer.from((data.signature as DuckDBBlobValue).bytes) : undefined,
     chainType,
+    precommitted: data.precommitted != null ? (data.precommitted as boolean) : undefined,
   });
 }
 

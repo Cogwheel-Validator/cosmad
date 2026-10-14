@@ -11,13 +11,15 @@ function formatTime(iso: string): string {
 }
 
 // -1 = not in active set, 0 = active but missed, 1 = active and signed.
-function signedClass(signed: number): string {
+function signedClass(signed: number, precommitted?: boolean): string {
+  if (signed === 1 && precommitted === false) return "text-warning font-bold";
   if (signed === 1) return "text-success font-bold";
   if (signed === 0) return "text-error font-bold";
   return "text-base-content/60 font-bold";
 }
 
-function signedLabel(signed: number): string {
+function signedLabel(signed: number, precommitted?: boolean): string {
+  if (signed === 1 && precommitted === false) return "⚠";
   if (signed === 1) return "✓";
   if (signed === 0) return "✗";
   return "·";

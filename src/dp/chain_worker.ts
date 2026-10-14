@@ -180,14 +180,16 @@ export async function commitToBlock(
   const time = new Date(header.time);
   const hash = commitData.blockId.hash;
 
-  let signed: number;
+  let signed: number = 0;
   let signature: string | undefined;
+  let precommitted: boolean | undefined;
 
   if ("signatures" in commitData && commitData.signatures != null) {
     // Cosmos BFT path - identify validator by hex consensus address
     const sig = commitData.signatures.find((s) => s != null && s.validatorAddress === valconsHex);
     if (sig != null) {
-      signed = sig.blockIdFlag === 2 ? 1 : 0;
+      precommitted = sig.blockIdFlag === 2;
+      signed = sig.blockIdFlag === 2 || sig.blockIdFlag === 3 ? 1 : 0;
       if (signed === 1 && sig.signature != null) signature = sig.signature;
     } else if (activeSetHex?.has(valconsHex ?? "")) {
       // No signature entry, but the validator is a known active-set member - a clear miss,
@@ -209,8 +211,11 @@ export async function commitToBlock(
     // is coincidence, not a guarantee - don't rely on it holding elsewhere.
     const addr = signerAddress(chain);
     const pre = commitData.precommits.find((p) => p != null && p.validatorAddress === addr);
-    signed = pre != null && pre.type === 2 ? 1 : 0;
-    if (signed === 1 && pre?.signature != null) signature = pre.signature;
+    if (pre != null) {
+      precommitted = pre.type === 2;
+      signed = pre.type === 2 || pre.type === 3 ? 1 : 0;
+      if (signed === 1 && pre.signature != null) signature = pre.signature;
+    }
   } else {
     signed = 0;
   }
@@ -223,6 +228,7 @@ export async function commitToBlock(
     signed,
     signature,
     chainType: chain.chainType,
+    precommitted,
   });
 }
 

@@ -4,6 +4,7 @@ export interface BlockJson {
   time: string;
   signed: number;
   signature: string | null;
+  precommitted: boolean | null;
 }
 
 export interface AlertJson {

@@ -1,5 +1,6 @@
 import {
   BLOB,
+  BOOLEAN,
   type DuckDBConnection,
   DuckDBDataChunk,
   DuckDBTimestampValue,
@@ -56,7 +57,15 @@ export async function appendBlocks(
     // Split larger batches across multiple chunks on the same appender.
     for (let i = 0; i < duckdbData.length; i += APPENDER_CHUNK_ROWS) {
       const slice = duckdbData.slice(i, i + APPENDER_CHUNK_ROWS);
-      const chunk = DuckDBDataChunk.create([VARCHAR, UBIGINT, BLOB, TIMESTAMP, TINYINT, BLOB]);
+      const chunk = DuckDBDataChunk.create([
+        VARCHAR,
+        UBIGINT,
+        BLOB,
+        TIMESTAMP,
+        TINYINT,
+        BLOB,
+        BOOLEAN,
+      ]);
       chunk.setRows(
         slice.map((data) => [
           data.chainId,
@@ -65,6 +74,7 @@ export async function appendBlocks(
           data.time,
           data.signed,
           data.signature ?? null,
+          data.precommitted ?? null,
         ]),
       );
       appender.appendDataChunk(chunk);
@@ -97,7 +107,7 @@ export async function insertBlocks(
     blocks[blocks.length - 1]?.height.toString(),
   );
   const duckdbData = blocks.map((block) => blockToRow(block));
-  const placeholders = duckdbData.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+  const placeholders = duckdbData.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ");
   const sql = `INSERT INTO blocks VALUES ${placeholders}`;
   const values = duckdbData.flatMap((data) => [
     data.chainId,
@@ -106,6 +116,7 @@ export async function insertBlocks(
     data.time,
     data.signed,
     data.signature ?? null,
+    data.precommitted ?? null,
   ]);
   try {
     const result = await conn.run(sql, values);
@@ -137,7 +148,8 @@ export async function latestBlock(
       hash,
       time,
       signed,
-      signature
+      signature,
+      precommitted
     FROM blocks
     WHERE chain_id = ?
     ORDER BY height DESC LIMIT 1`;
@@ -330,7 +342,8 @@ export async function getBlockByHeight(
       hash,
       time,
       signed,
-      signature
+      signature,
+      precommitted
     FROM blocks
     WHERE
       chain_id = ? AND height = ?`;
@@ -368,7 +381,8 @@ export async function getBlockByRange(
       hash,
       time,
       signed,
-      signature
+      signature,
+      precommitted
     FROM blocks
     WHERE
       chain_id = ? AND height >= ? AND height <= ?
