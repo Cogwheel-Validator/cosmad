@@ -242,3 +242,17 @@ export class ValidatorInactivity {
     if (options.endTime !== undefined) this.endTime = options.endTime;
   }
 }
+
+@Table("cosmad_version")
+export class Version {
+  @Column({ name: "version", type: AllowedTypes.TEXT, primary: true, nullable: false })
+  version: string;
+
+  @Column({ name: "applied_at", type: AllowedTypes.TIMESTAMP, nullable: false })
+  appliedAt: Date;
+
+  constructor(version: string, appliedAt: Date) {
+    this.version = version;
+    this.appliedAt = appliedAt;
+  }
+}

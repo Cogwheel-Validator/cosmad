@@ -517,3 +517,51 @@ describe("RWDB schema evolution", () => {
     }
   });
 });
+
+describe("RWDB options", () => {
+  test("accepts a Map of raw duckdb settings", async () => {
+    const dir = join(tmpdir(), `cosmad_test_rw_map_${Date.now()}`);
+    const d = await RWDB.create(
+      dir,
+      new Map([
+        ["threads", "1"],
+        ["memory_limit", "256MB"],
+      ]),
+    );
+    d.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("rejects a non-existent setting", async () => {
+    const dir = join(tmpdir(), `cosmad_test_rw_bad_${Date.now()}`);
+    await expect(RWDB.create(dir, { not_a_real_setting: "1" })).rejects.toThrow(
+      /Failed to open DuckDB/,
+    );
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("RWDB versioning", () => {
+  test("fresh database is stamped, legacy database is treated as version 0", async () => {
+    const versions = async (d: RWDB) =>
+      (await d.conn.runAndReadAll("SELECT version FROM version")).getRowObjectsJson();
+    expect(await versions(db)).toHaveLength(1);
+
+    const dir = join(tmpdir(), `cosmad_test_rw_legacy_${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    const instance = await DuckDBInstance.create(`${dir}/cosmad.duckdb`);
+    const conn = await instance.connect();
+    await conn.run(
+      "CREATE TABLE alerts (alert_id VARCHAR(64) NOT NULL PRIMARY KEY, chain_id TEXT NOT NULL, alert_type TEXT NOT NULL, opened_at TIMESTAMP NOT NULL, closed_at TIMESTAMP, last_notified_at TIMESTAMP, repeat_count INT4 NOT NULL DEFAULT 0)",
+    );
+    conn.closeSync();
+    instance.closeSync();
+    const d = await RWDB.create(dir, { threads: "1" });
+    try {
+      expect(await versions(d)).toHaveLength(0);
+    } finally {
+      d.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

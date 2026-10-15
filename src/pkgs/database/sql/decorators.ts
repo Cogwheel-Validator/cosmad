@@ -2,7 +2,7 @@ import { type ColumnOptions, type Constructor, columnRegistry, tableRegistry } f
 
 export function Table(tableName: string) {
   // biome-ignore lint/complexity/noBannedTypes: <It has to be done like this to wrap it arround class.>
-  return (target: Function,) => {
+  return (target: Function) => {
     tableRegistry.set(target as Constructor, tableName);
   };
 }

@@ -7,7 +7,8 @@ import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../
 import type { IWriteDb } from "../interfaces";
 import { generateCreateTableStatements } from "../sql/generate";
 import type { Constructor } from "../sql/types";
-import { Alert, Block, ValidatorInactivity } from "../tables";
+import { Alert, Block, ValidatorInactivity, Version } from "../tables";
+import { latestMigrationVersion, migrations } from "./migrations";
 import * as alertQueries from "./queries/alerts";
 import * as blockQueries from "./queries/blocks";
 import * as inactivityQueries from "./queries/inactivity";
@@ -55,8 +56,6 @@ export class RWDB {
 
     // Defaults first so caller-provided settings win.
     const dbOptions: Record<string, string> = {
-      threads: options.threads,
-      memory_limit: options.memoryLimit,
       temp_directory: tempDir,
       access_mode: "READ_WRITE",
       max_temp_directory_size: "4GB",
@@ -90,15 +89,81 @@ export class RWDB {
     return rwdb;
   }
 
-  // initSchema initialises the database schema
+  // initSchema initialises the database schema and applies pending migrations.
   private async initSchema(): Promise<void> {
-    const tables: Constructor[] = [Block, Alert, ValidatorInactivity] as unknown as Constructor[];
+    const existing = await this.existingTables();
+    const isFresh = existing.size === 0;
+
+    // The version table is created first so we can tell what version an existing database is at.
+    for (const stmt of generateCreateTableStatements(Version as Constructor)) {
+      await this.conn.run(stmt);
+    }
+
+    if (isFresh) {
+      // Nothing to migrate: the generated schema is already the latest.
+      await this.recordVersion(latestMigrationVersion);
+    } else {
+      // A database from before versioning has no version table (or an empty one): treat as 0.
+      await this.migrate(await this.currentVersion());
+    }
+
+    const tables: Constructor[] = [Block, Alert, ValidatorInactivity] as Constructor[];
     for (const table of tables) {
       for (const stmt of generateCreateTableStatements(table)) {
         await this.conn.run(stmt);
       }
     }
     this.log.info("Schema initialised");
+  }
+
+  private async existingTables(): Promise<Set<string>> {
+    const reader = await this.conn.runAndReadAll(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'",
+    );
+    return new Set(reader.getRowObjectsJson().map((r) => String(r.table_name)));
+  }
+
+  private async currentVersion(): Promise<number> {
+    const reader = await this.conn.runAndReadAll("SELECT version FROM cosmad_version");
+    const versions = reader.getRowObjectsJson().map((r) => Number(r.version));
+    return versions.length === 0 ? 0 : Math.max(...versions);
+  }
+
+  private async recordVersion(version: number): Promise<void> {
+    const prepared = await this.conn.prepare(
+      "INSERT INTO cosmad_version (version, applied_at) VALUES ($1, now()::TIMESTAMP) ON CONFLICT DO NOTHING",
+    );
+    prepared.bindVarchar(1, String(version));
+    await prepared.run();
+  }
+
+  // migrate runs, in order, every migration newer than the database's current version.
+  // Each migration and its version record commit together, so a failure leaves the
+  // database at the last fully applied version.
+  private async migrate(from: number): Promise<void> {
+    const pending = migrations
+      .filter((m) => m.version > from)
+      .sort((a, b) => a.version - b.version);
+    if (pending.length === 0) {
+      this.log.info("Database is up to date at version %d", from);
+      return;
+    }
+    for (const migration of pending) {
+      this.log.info("Applying migration %d", migration.version);
+      await this.conn.run("BEGIN TRANSACTION");
+      try {
+        for (const stmt of migration.sql) await this.conn.run(stmt);
+        await this.recordVersion(migration.version);
+        await this.conn.run("COMMIT");
+      } catch (err) {
+        await this.conn.run("ROLLBACK");
+        throw new Error(
+          `Migration ${migration.version} failed: ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
+        );
+      }
+    }
+    this.log.info("Database migrated from version %d to %d", from, latestMigrationVersion);
   }
 
   /** Round-robins across the reader pool - call once per read-only query issued. */
