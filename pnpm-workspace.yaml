@@ -2,3 +2,6 @@ allowBuilds:
   esbuild: true
   vue-demi: true
 minimumReleaseAge: 10080
+overrides:
+  "fast-copy": ">=4.1.0"
+  "source-map-js": ">=1.2.2"
