@@ -18,7 +18,7 @@ let writer: EngineConnection;
 let reader: EngineConnection;
 
 beforeAll(async () => {
-  const options = { threads: "2", memoryLimit: "500MB", maxTempDirectorySize: "1GB" };
+  const options = { threads: "2", memory_limit: "500MB", max_temp_directory_size: "1GB" };
   rwdb = await RWDB.create(testDir, options);
   stopServer = await startEngineServer(
     rwdb,

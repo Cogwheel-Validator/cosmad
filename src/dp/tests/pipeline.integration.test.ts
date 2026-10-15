@@ -184,7 +184,7 @@ describe("ingest pipeline integration", () => {
   let dispatcher: NotificationDispatcher;
 
   beforeAll(async () => {
-    db = await RWDB.create(testDir, { threads: "1", memoryLimit: "512MB" });
+    db = await RWDB.create(testDir, { threads: "1", memory_limit: "512MB" });
     writeDb = db.forChain(CHAIN_ID, "bft");
 
     chain = {

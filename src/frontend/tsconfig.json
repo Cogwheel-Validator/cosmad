@@ -2,8 +2,8 @@
   "compilerOptions": {
     "plugins": [
       {
-        "name": "typescript-vue-plugin",
-      },
+        "name": "typescript-vue-plugin"
+      }
     ],
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -16,7 +16,7 @@
     "jsx": "preserve",
     "jsxImportSource": "vue",
     "skipLibCheck": true,
-    "types": ["vite/client"],
+    "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.vue"],
+  "include": ["src/**/*.ts", "src/**/*.vue"]
 }

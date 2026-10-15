@@ -13,11 +13,11 @@ import * as blockQueries from "./queries/blocks";
 import * as inactivityQueries from "./queries/inactivity";
 import { ChainScopedDb } from "./scoped";
 
-export interface DuckDbOptions {
-  threads: string;
-  memoryLimit: string;
-  maxTempDirectorySize?: string;
-}
+/**
+ * Raw DuckDB settings, keyed by DuckDB's own setting names (e.g. `threads`, `memory_limit`).
+ * Any setting DuckDB supports can be passed; unknown settings make RWDB.create reject.
+ */
+export type DuckDbOptions = Record<string, string> | Map<string, string>;
 
 // Number of dedicated read connections, round-robined across for every read-only query.
 const READER_POOL_SIZE = 10;
@@ -53,18 +53,31 @@ export class RWDB {
       mkdirSync(tempDir, { recursive: true });
     }
 
+    // Defaults first so caller-provided settings win.
     const dbOptions: Record<string, string> = {
       threads: options.threads,
       memory_limit: options.memoryLimit,
       temp_directory: tempDir,
       access_mode: "READ_WRITE",
-      max_temp_directory_size: options.maxTempDirectorySize ?? "4GB",
+      max_temp_directory_size: "4GB",
+      ...(options instanceof Map ? Object.fromEntries(options) : options),
     };
 
     const log = logger.child({ module: "RWDB" });
     log.info("Opening database at %s (may take a while if replaying WAL entries)", dbDir);
     const openStartedAt = Date.now();
-    const instance = await DuckDBInstance.create(`${dbDir}/cosmad.duckdb`, dbOptions);
+    let instance: DuckDBInstance;
+    try {
+      instance = await DuckDBInstance.create(`${dbDir}/cosmad.duckdb`, dbOptions);
+    } catch (err) {
+      // DuckDB rejects unknown or malformed settings here.
+      throw new Error(
+        `Failed to open DuckDB with options ${JSON.stringify(dbOptions)}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        { cause: err },
+      );
+    }
     const conn = await instance.connect();
     const readConns = await Promise.all(
       Array.from({ length: READER_POOL_SIZE }, () => instance.connect()),

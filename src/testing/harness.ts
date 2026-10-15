@@ -103,7 +103,7 @@ export class Harness {
       alertConfig: { ...DEFAULT_ALERT_CONFIG, ...this.opts.alertConfig },
     };
 
-    this.rwdb = await RWDB.create(join(this.dir, "db"), { threads: "1", memoryLimit: "256MB" });
+    this.rwdb = await RWDB.create(join(this.dir, "db"), { threads: "1", memory_limit: "256MB" });
     const socketPath = join(this.dir, "engine.sock");
     this.stopEngine = await startEngineServer(
       this.rwdb,

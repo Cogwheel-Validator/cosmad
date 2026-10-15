@@ -1,8 +1,8 @@
 import type { DuckDbOptions } from "../pkgs/database/duckdb/rw_db";
 import type { ChainConfigType } from "./chain_types";
 import { ConfigLoader } from "./config_loader";
-import type { CorsConfigType, CsrfConfigType } from "./http_types";
 import { loadEnv } from "./env";
+import type { CorsConfigType, CsrfConfigType } from "./http_types";
 import type {
   DiscordConfigType,
   HealthCheckConfigType,
@@ -44,8 +44,8 @@ export const config: CosmadConfig = {
   dbDir: env.dbDirectory,
   dbOptions: {
     threads: env.dbThreads,
-    memoryLimit: env.dbMemLimit,
-    maxTempDirectorySize: env.dbMaxTempDirSize,
+    memory_limit: env.dbMemLimit,
+    max_temp_directory_size: env.dbMaxTempDirSize,
   },
   api: {
     port: env.apiPort,

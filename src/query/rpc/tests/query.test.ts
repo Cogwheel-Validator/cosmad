@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AxiosResponse } from "axios";
 import axios from "axios";
-import { beforeEach, describe, expect, test, vi, assert } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { getCommit, getStatus } from "../query";
 
 vi.mock("axios");

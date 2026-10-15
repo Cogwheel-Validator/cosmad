@@ -13,7 +13,7 @@ let db: RWDB;
 
 beforeAll(async () => {
   // RWDB.create initialises the schema automatically.
-  const options = { threads: "2", memoryLimit: "500MB", maxTempDirectorySize: "1GB" };
+  const options = { threads: "2", memory_limit: "500MB", max_temp_directory_size: "1GB" };
   db = await RWDB.create(testDir, options);
 });
 
@@ -493,7 +493,7 @@ describe("RWDB schema evolution", () => {
     conn.closeSync();
     instance.closeSync();
 
-    const upgraded = await RWDB.create(oldDir, { threads: "1", memoryLimit: "256MB" });
+    const upgraded = await RWDB.create(oldDir, { threads: "1", memory_limit: "256MB" });
     try {
       const old = await upgraded.getAlert("old-alert");
       assert(old.ok);
