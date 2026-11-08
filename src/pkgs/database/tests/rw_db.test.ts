@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { latestMigrationVersion } from "../duckdb/migrations";
 import { RWDB } from "../duckdb/rw_db";
 import { Alert, Block, ValidatorInactivity } from "../tables";
 
@@ -544,7 +545,7 @@ describe("RWDB options", () => {
 describe("RWDB versioning", () => {
   test("fresh database is stamped, legacy database is treated as version 0", async () => {
     const versions = async (d: RWDB) =>
-      (await d.conn.runAndReadAll("SELECT version FROM version")).getRowObjectsJson();
+      (await d.conn.runAndReadAll("SELECT version FROM cosmad_version")).getRowObjectsJson();
     expect(await versions(db)).toHaveLength(1);
 
     const dir = join(tmpdir(), `cosmad_test_rw_legacy_${Date.now()}`);
@@ -558,7 +559,8 @@ describe("RWDB versioning", () => {
     instance.closeSync();
     const d = await RWDB.create(dir, { threads: "1" });
     try {
-      expect(await versions(d)).toHaveLength(0);
+      // Treated as version 0, so every migration ran and the latest version got stamped.
+      expect(await versions(d)).toEqual([{ version: String(latestMigrationVersion) }]);
     } finally {
       d.close();
       rmSync(dir, { recursive: true, force: true });

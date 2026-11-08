@@ -14,10 +14,12 @@ import {
   type EngineRole,
   type HelloMessage,
   inactivityToWire,
+  notificationToWire,
   WRITE_REQUEST_TYPES,
   wireToAlert,
   wireToBlock,
   wireToInactivity,
+  wireToNotification,
 } from "./protocol";
 import { onLines, sendLine } from "./socket";
 
@@ -69,6 +71,16 @@ const handlers: Handlers = {
   closeAlert: (p, { db }) => db.closeAlert(p.alertId, new Date(p.closedAt)),
   touchAlertNotified: (p, { db }) =>
     db.touchAlertNotified(p.alertId, new Date(p.notifiedAt), p.repeatCount),
+  enqueueNotifications: (p, { db }) => db.enqueueNotifications(p.items.map(wireToNotification)),
+  getPendingNotifications: async (p, { db }) => {
+    const r = await db.getPendingNotifications(p.chainId, p.limit);
+    return r.ok ? { ok: true, value: r.value.map(notificationToWire) } : r;
+  },
+  markNotificationDelivered: (p, { db }) =>
+    db.markNotificationDelivered(p.id, new Date(p.deliveredAt), p.note),
+  markNotificationFailed: (p, { db }) =>
+    db.markNotificationFailed(p.id, p.failedRounds, new Date(p.nextAttemptAt), p.error),
+  pruneNotifications: (p, { db }) => db.pruneNotifications(p.chainId, new Date(p.before)),
   insertInactivity: (p, { db }) => db.insertInactivity(wireToInactivity(p.period)),
   endInactivity: (p, { db }) =>
     db.endInactivity(p.chainId, BigInt(p.startHeight), BigInt(p.endHeight), new Date(p.endTime)),

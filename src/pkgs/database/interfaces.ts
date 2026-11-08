@@ -1,6 +1,6 @@
 import type { Result } from "../models/result";
 import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "./analytics";
-import type { Alert, Block, ValidatorInactivity } from "./tables";
+import type { Alert, Block, NotificationOutbox, ValidatorInactivity } from "./tables";
 
 // Interface for methods that provide read only access to the database.
 // Necessary for the databases where you need to read but not write.
@@ -35,6 +35,25 @@ export interface IWriteDb extends IReadDb {
     notifiedAt: Date,
     repeatCount: number,
   ): Promise<Result<void, Error>>;
+  // Notification outbox: notifications persisted before sending so they are retried until
+  // delivered, even across restarts.
+  enqueueNotifications(items: NotificationOutbox[]): Promise<Result<void, Error>>;
+  // Undelivered notifications, oldest first.
+  getPendingNotifications(limit: number): Promise<Result<NotificationOutbox[], Error>>;
+  // Marks a notification delivered, or (with a note saying why) dropped without being sent.
+  markNotificationDelivered(
+    id: string,
+    deliveredAt: Date,
+    note?: string,
+  ): Promise<Result<void, Error>>;
+  markNotificationFailed(
+    id: string,
+    failedRounds: number,
+    nextAttemptAt: Date,
+    error: string,
+  ): Promise<Result<void, Error>>;
+  // Deletes finished notifications older than `before`.
+  pruneNotifications(before: Date): Promise<Result<void, Error>>;
   // Start a validator inactivity period / end the one that started at startHeight.
   insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>>;
   endInactivity(

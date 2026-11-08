@@ -13,6 +13,21 @@ import { GlobalConfig, type GlobalConfigType } from "./global_config";
 const log = logger.child({ module: "config" });
 
 /**
+ * Settings that can be written without the unit in their name: `poll_interval = "6s"` is the
+ * same setting as the older `poll_interval_ms = 6000`. Applied at any depth, since chains can
+ * also be defined inside the global config.
+ */
+function applyKeyAliases<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(applyKeyAliases) as T;
+  if (value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value)) {
+    out[key === "pollInterval" ? "pollIntervalMs" : key] = applyKeyAliases(v);
+  }
+  return out as T;
+}
+
+/**
  * A helper function to load the global config from a toml file.
  * @param filePath path to the config.toml
  * @returns the parsed and validated global config
@@ -26,7 +41,9 @@ export function loadGlobalConfig(filePath: string): Result<GlobalConfigType, Err
 
   const raw = fs.readFileSync(filePath, "utf8");
   const parsed = TOML.parse(raw);
-  const normalized = camelcaseKeys(parsed as Record<string, unknown>, { deep: true });
+  const normalized = applyKeyAliases(
+    camelcaseKeys(parsed as Record<string, unknown>, { deep: true }),
+  );
   const config = GlobalConfig(normalized);
 
   if (config instanceof ArkErrors) {
@@ -76,7 +93,9 @@ export function loadChainConfigs(dirPath: string): Result<Map<string, ChainConfi
 
     const raw = fs.readFileSync(path.join(dirPath, file), "utf8");
     const parsed = TOML.parse(raw);
-    const normalized = camelcaseKeys(parsed as Record<string, unknown>, { deep: true });
+    const normalized = applyKeyAliases(
+      camelcaseKeys(parsed as Record<string, unknown>, { deep: true }),
+    );
     const config = ChainConfig(normalized);
 
     if (config instanceof ArkErrors) {
@@ -139,6 +158,17 @@ function validateChainConfig(chainId: string, config: ChainConfigType): null | G
 
   if (config.chainType === "bft" && (!config.apiUrls || config.apiUrls.length === 0)) {
     const error = `Chain config is missing apiUrls (required for bft chains): ${chainId}`;
+    log.error(error);
+    return new GeneralLoaderError(error);
+  }
+
+  const { notifyRetryPause, notifyRetryMaxPause } = config.alertConfig;
+  if (
+    notifyRetryPause != null &&
+    notifyRetryMaxPause != null &&
+    notifyRetryMaxPause < notifyRetryPause
+  ) {
+    const error = `Chain ${chainId}: alertConfig.notifyRetryMaxPause must be >= notifyRetryPause`;
     log.error(error);
     return new GeneralLoaderError(error);
   }

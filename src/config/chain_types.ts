@@ -1,5 +1,6 @@
 import { type } from "arktype";
 import { AlertConfig } from "./alert_types";
+import { PositiveMilliseconds, PositiveSeconds } from "./duration";
 
 export const Apis = type({
   url: "string.url",
@@ -11,8 +12,11 @@ const ChainConfigBase = type({
   "chainLogo?": "string",
   rpcUrls: Apis.array(),
   "apiUrls?": Apis.array(), // only available for bft chains, leave undefined for tm2 chains
-  /** How often to poll the RPC endpoint (ms). Defaults to 6 000. */
-  "pollIntervalMs?": "number.integer",
+  /**
+   * How often to poll the RPC endpoint, e.g. "6s". A bare number is milliseconds. Defaults to 6s.
+   * Set it as `poll_interval` (preferred) or the older `poll_interval_ms`.
+   */
+  "pollIntervalMs?": PositiveMilliseconds,
   // Max number of commit requests in flight at once when backfilling a range of blocks (e.g.
   // after downtime). Smaller batches are gentler on rate-limited RPCs at the cost of slower
   // catch-up. Defaults to 25 if unset.
@@ -22,11 +26,11 @@ const ChainConfigBase = type({
   // across many poll cycles instead of one giant fetch and dump into database.
   // Defaults to 100 if unset.
   "maxBlocksPerPoll?": "number.integer > 0",
-  // How often (seconds) every configured RPC/API endpoint is health checked. An endpoint's outage
+  // How often every configured RPC/API endpoint is health checked. An endpoint's outage
   // is noticed at its next check; rpc_down/api_down then waits for
   // alertConfig.endpointDownAlertAfter before alerting.
-  // Defaults to 60 if unset.
-  "healthCheckInterval?": "number > 0",
+  // e.g. "1m"; a bare number is seconds. Defaults to 1m if unset.
+  "healthCheckInterval?": PositiveSeconds,
   // EXPERIMENTAL!
   // If a commit fetch permanently fails (exhausts its retries) partway through a poll's range,
   // the default behavior is to stop ingesting right before that height and retry it every

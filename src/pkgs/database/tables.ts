@@ -243,6 +243,20 @@ export class ValidatorInactivity {
   }
 }
 
+interface NotificationOutboxOptions {
+  id: string;
+  chainId: string;
+  alertId: string;
+  notifier: string;
+  kind: string;
+  payload: string;
+  failedRounds?: number;
+  nextAttemptAt: Date;
+  createdAt: Date;
+  deliveredAt?: Date;
+  lastError?: string;
+}
+
 @Table("cosmad_version")
 export class Version {
   @Column({ name: "version", type: AllowedTypes.TEXT, primary: true, nullable: false })
@@ -254,5 +268,72 @@ export class Version {
   constructor(version: string, appliedAt: Date) {
     this.version = version;
     this.appliedAt = appliedAt;
+  }
+}
+
+/**
+ * One notification waiting to be (or already) delivered to one notifier. Rows are written before
+ * the first send so a notification survives a notifier outage or a restart, and are retried
+ * until delivered. See NotificationDispatcher for the retry policy.
+ */
+@Table("notification_outbox")
+export class NotificationOutbox {
+  @Column({
+    name: "id",
+    type: AllowedTypes.VARCHAR,
+    primary: true,
+    nullable: false,
+    varcharLen: 64,
+  })
+  id: string;
+
+  @Column({ name: "chain_id", type: AllowedTypes.TEXT, nullable: false })
+  chainId: string;
+
+  @Column({ name: "alert_id", type: AllowedTypes.VARCHAR, nullable: false, varcharLen: 64 })
+  alertId: string;
+
+  // telegram / discord / pagerduty
+  @Column({ name: "notifier", type: AllowedTypes.TEXT, nullable: false })
+  notifier: string;
+
+  // opened / repeat / closed
+  @Column({ name: "kind", type: AllowedTypes.TEXT, nullable: false })
+  kind: string;
+
+  // The rendered AlertNotification, as JSON.
+  @Column({ name: "payload", type: AllowedTypes.TEXT, nullable: false })
+  payload: string;
+
+  // Number of fully failed send rounds so far; drives the growing pause between rounds.
+  @Column({ name: "failed_rounds", type: AllowedTypes.INTEGER, nullable: false, default: "0" })
+  failedRounds: number;
+
+  @Column({ name: "next_attempt_at", type: AllowedTypes.TIMESTAMP, nullable: false })
+  nextAttemptAt: Date;
+
+  @Column({ name: "created_at", type: AllowedTypes.TIMESTAMP, nullable: false })
+  createdAt: Date;
+
+  // Set once delivered, or once given up on (see lastError).
+  @Column({ name: "delivered_at", type: AllowedTypes.TIMESTAMP, nullable: true })
+  deliveredAt?: Date;
+
+  // The latest send error while pending, or why the row was dropped without being sent.
+  @Column({ name: "last_error", type: AllowedTypes.TEXT, nullable: true })
+  lastError?: string;
+
+  constructor(options: NotificationOutboxOptions) {
+    this.id = options.id;
+    this.chainId = options.chainId;
+    this.alertId = options.alertId;
+    this.notifier = options.notifier;
+    this.kind = options.kind;
+    this.payload = options.payload;
+    this.failedRounds = options.failedRounds ?? 0;
+    this.nextAttemptAt = options.nextAttemptAt;
+    this.createdAt = options.createdAt;
+    if (options.deliveredAt !== undefined) this.deliveredAt = options.deliveredAt;
+    if (options.lastError !== undefined) this.lastError = options.lastError;
   }
 }

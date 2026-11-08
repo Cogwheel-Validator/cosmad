@@ -5,7 +5,7 @@ import {
   type DuckDBValue,
 } from "@duckdb/node-api";
 import { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
-import { Alert, Block, ValidatorInactivity } from "../tables";
+import { Alert, Block, NotificationOutbox, ValidatorInactivity } from "../tables";
 
 export interface BlockRow {
   chainId: string;
@@ -158,5 +158,51 @@ export function rowToInactivity(data: Record<string, DuckDBValue>): ValidatorIna
     ...(data.jailed_until != null ? { jailedUntil: fromTimestamp(data.jailed_until) } : {}),
     ...(data.end_height != null ? { endHeight: data.end_height as bigint } : {}),
     ...(data.end_time != null ? { endTime: fromTimestamp(data.end_time) } : {}),
+  });
+}
+
+export interface NotificationOutboxRow {
+  id: string;
+  chainId: string;
+  alertId: string;
+  notifier: string;
+  kind: string;
+  payload: string;
+  failedRounds: number;
+  nextAttemptAt: DuckDBTimestampValue;
+  createdAt: DuckDBTimestampValue;
+  deliveredAt: DuckDBTimestampValue | null;
+  lastError: string | null;
+}
+
+export function outboxToRow(n: NotificationOutbox): NotificationOutboxRow {
+  return {
+    id: n.id,
+    chainId: n.chainId,
+    alertId: n.alertId,
+    notifier: n.notifier,
+    kind: n.kind,
+    payload: n.payload,
+    failedRounds: n.failedRounds,
+    nextAttemptAt: toTimestamp(n.nextAttemptAt),
+    createdAt: toTimestamp(n.createdAt),
+    deliveredAt: n.deliveredAt != null ? toTimestamp(n.deliveredAt) : null,
+    lastError: n.lastError ?? null,
+  };
+}
+
+export function rowToOutbox(data: Record<string, DuckDBValue>): NotificationOutbox {
+  return new NotificationOutbox({
+    id: data.id as string,
+    chainId: data.chain_id as string,
+    alertId: data.alert_id as string,
+    notifier: data.notifier as string,
+    kind: data.kind as string,
+    payload: data.payload as string,
+    failedRounds: Number(data.failed_rounds as number),
+    nextAttemptAt: fromTimestamp(data.next_attempt_at as DuckDBValue),
+    createdAt: fromTimestamp(data.created_at as DuckDBValue),
+    ...(data.delivered_at != null ? { deliveredAt: fromTimestamp(data.delivered_at) } : {}),
+    ...(data.last_error != null ? { lastError: data.last_error as string } : {}),
   });
 }

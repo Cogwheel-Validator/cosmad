@@ -32,4 +32,4 @@ service_key = "CHANGE_ME"
 [health_check]
 enabled = false
 endpoint = "https://hc-ping.com/CHANGE_ME"
-ping = 60
+ping = "1m"

@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/suspicious/noConfusingVoidType: <result requires void since we are mapping the result to a response> */
 import { ChainSignatureStats } from "../pkgs/database/analytics";
-import { Alert, Block, ValidatorInactivity } from "../pkgs/database/tables";
+import { Alert, Block, NotificationOutbox, ValidatorInactivity } from "../pkgs/database/tables";
 
 /**
  * JSON-safe wire shapes for Block/Alert, since JSON can't carry bigint, Buffer,
@@ -141,6 +141,53 @@ export function wireToInactivity(wire: WireInactivity): ValidatorInactivity {
   });
 }
 
+/** WireNotification is the JSON-safe wire shape for a NotificationOutbox row. */
+export interface WireNotification {
+  id: string;
+  chainId: string;
+  alertId: string;
+  notifier: string;
+  kind: string;
+  payload: string;
+  failedRounds: number;
+  nextAttemptAt: string;
+  createdAt: string;
+  deliveredAt?: string;
+  lastError?: string;
+}
+
+export function notificationToWire(n: NotificationOutbox): WireNotification {
+  return {
+    id: n.id,
+    chainId: n.chainId,
+    alertId: n.alertId,
+    notifier: n.notifier,
+    kind: n.kind,
+    payload: n.payload,
+    failedRounds: n.failedRounds,
+    nextAttemptAt: n.nextAttemptAt.toISOString(),
+    createdAt: n.createdAt.toISOString(),
+    ...(n.deliveredAt != null ? { deliveredAt: n.deliveredAt.toISOString() } : {}),
+    ...(n.lastError != null ? { lastError: n.lastError } : {}),
+  };
+}
+
+export function wireToNotification(wire: WireNotification): NotificationOutbox {
+  return new NotificationOutbox({
+    id: wire.id,
+    chainId: wire.chainId,
+    alertId: wire.alertId,
+    notifier: wire.notifier,
+    kind: wire.kind,
+    payload: wire.payload,
+    failedRounds: wire.failedRounds,
+    nextAttemptAt: new Date(wire.nextAttemptAt),
+    createdAt: new Date(wire.createdAt),
+    ...(wire.deliveredAt != null ? { deliveredAt: new Date(wire.deliveredAt) } : {}),
+    ...(wire.lastError != null ? { lastError: wire.lastError } : {}),
+  });
+}
+
 /** WireChainSignatureStats is the JSON-safe wire shape for a ChainSignatureStats - already
  * plain numbers/strings, so it's a straight field-for-field mirror. */
 export interface WireChainSignatureStats {
@@ -179,6 +226,29 @@ export interface EngineOps {
     params: { chainId: string; alertId: string; notifiedAt: string; repeatCount: number };
     result: void;
   };
+  enqueueNotifications: {
+    params: { chainId: string; items: WireNotification[] };
+    result: void;
+  };
+  getPendingNotifications: {
+    params: { chainId: string; limit: number };
+    result: WireNotification[];
+  };
+  markNotificationDelivered: {
+    params: { chainId: string; id: string; deliveredAt: string; note?: string };
+    result: void;
+  };
+  markNotificationFailed: {
+    params: {
+      chainId: string;
+      id: string;
+      failedRounds: number;
+      nextAttemptAt: string;
+      error: string;
+    };
+    result: void;
+  };
+  pruneNotifications: { params: { chainId: string; before: string }; result: void };
   insertInactivity: { params: { chainId: string; period: WireInactivity }; result: void };
   endInactivity: {
     params: { chainId: string; startHeight: string; endHeight: string; endTime: string };
@@ -231,6 +301,10 @@ export const WRITE_REQUEST_TYPES: ReadonlySet<EngineRequestBody["type"]> = new S
   "insertAlert",
   "closeAlert",
   "touchAlertNotified",
+  "enqueueNotifications",
+  "markNotificationDelivered",
+  "markNotificationFailed",
+  "pruneNotifications",
   "insertInactivity",
   "endInactivity",
 ]);

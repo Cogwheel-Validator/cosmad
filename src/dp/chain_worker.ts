@@ -393,6 +393,8 @@ export async function doPoll(
   events.push(...alertEval.evaluateEndpoints(endpointChecks(chain, query), openAlerts));
 
   for (const event of events) {
+    // Persisted first: if we crash after this the event is re-detected and sent again rather than lost.
+    await dispatcher.enqueue(event, chain.chainId);
     if (event.kind === "open") {
       const r = await ingest.ingestAlert(event.alert);
       if (!r.ok) chainLog.error("Failed to insert alert %s: %s", event.alert.alertId, r.error);
@@ -407,8 +409,8 @@ export async function doPoll(
       const r = await ingest.closeAlert(event.alert.alertId, event.closedAt);
       if (!r.ok) chainLog.error("Failed to close alert %s: %s", event.alert.alertId, r.error);
     }
-    await dispatcher.dispatch(event, chain.chainId);
   }
+  await dispatcher.deliverPending();
 }
 
 /**
@@ -615,7 +617,7 @@ export async function runChainWorker(
   );
   const ingest = new IngestLayer(db, chain.chainId);
   const alertEval = new AlertEvaluator(chain.chainId, chain.alertConfig);
-  const dispatcher = new NotificationDispatcher(chain.alertConfig, globalAlerts);
+  const dispatcher = new NotificationDispatcher(chain.alertConfig, globalAlerts, db);
 
   // Bech32 valcons -> hex
   const valconsHex =
@@ -662,6 +664,9 @@ export async function runChainWorker(
     }
   };
 
+  // Retries notifications that failed to send (including ones left over from before a restart).
+  const stopDelivery = dispatcher.start();
+
   // Fire immediately, then on interval
   void poll();
   const timer = setInterval(poll, chain.pollIntervalMs ?? 6_000);
@@ -669,6 +674,7 @@ export async function runChainWorker(
 
   return () => {
     clearInterval(timer);
+    stopDelivery();
     chainLog.info("Chain worker stopped");
   };
 }

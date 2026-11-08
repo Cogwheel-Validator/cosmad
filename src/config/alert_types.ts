@@ -1,11 +1,12 @@
 import { type } from "arktype";
+import { NonNegativeSeconds, PositiveSeconds } from "./duration";
 import { DiscordConfig, PagerdutyConfig, TelegramConfig } from "./notification_types";
 
 const ConsecutiveMissAlert = type({
   enabled: "boolean",
   threshold: "number", // blocks
   repeat: "boolean", // repeat the alert if not resolved, default false
-  repeatInterval: "number", // seconds
+  repeatInterval: NonNegativeSeconds, // e.g. "5m"; a bare number is seconds
 });
 
 const PercentageMissAlert = type({
@@ -21,7 +22,7 @@ export const AlertConfig = type({
   // Stalled alerts, when the chain doesn't produce blocks for certain amount of time.
   stalledAlert: type({
     enabled: "boolean",
-    stalledThreshold: "number", // seconds
+    stalledThreshold: NonNegativeSeconds, // e.g. "1m"; a bare number is seconds
   }),
 
   // Consecutive missed blocks alert, when the validator misses a certain amount of blocks in a row.
@@ -39,7 +40,13 @@ export const AlertConfig = type({
   // page anyone. 0 alerts on the first failed health check. Defaults to 180 (3 minutes) if unset.
   // Detection still happens on health checks, so the effective delay can be up to one
   // healthCheckInterval longer.
-  "endpointDownAlertAfter?": "number >= 0",
+  "endpointDownAlertAfter?": NonNegativeSeconds,
+
+  // A notification that could not be sent (3 quick attempts) is retried after a pause that doubles
+  // with every failed round, starting at notifyRetryPause and capped at notifyRetryMaxPause.
+  // Durations ("5m", "1h"); a bare number is seconds. Default 5m and 1h.
+  "notifyRetryPause?": PositiveSeconds,
+  "notifyRetryMaxPause?": PositiveSeconds,
 
   // Number of trailing blocks to use as the sliding signing window for
   // percentageMissedBlocksAlert evaluation.

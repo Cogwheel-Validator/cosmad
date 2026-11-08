@@ -5,7 +5,12 @@ import {
   DailyBlockStats,
 } from "../pkgs/database/analytics";
 import type { IApiReadDb, IWriteDb } from "../pkgs/database/interfaces";
-import type { Alert, Block, ValidatorInactivity } from "../pkgs/database/tables";
+import type {
+  Alert,
+  Block,
+  NotificationOutbox,
+  ValidatorInactivity,
+} from "../pkgs/database/tables";
 import type { Result } from "../pkgs/models/result";
 import {
   alertToWire,
@@ -16,11 +21,13 @@ import {
   type EngineResponse,
   type EngineRole,
   inactivityToWire,
+  notificationToWire,
   type ResultOf,
   wireToAlert,
   wireToBlock,
   wireToChainSignatureStats,
   wireToInactivity,
+  wireToNotification,
 } from "./protocol";
 import { onLines, sendLine } from "./socket";
 
@@ -193,6 +200,69 @@ export class EngineClient implements IWriteDb {
       alertId,
       notifiedAt: notifiedAt.toISOString(),
       repeatCount,
+    });
+    return toResult(response, () => undefined);
+  }
+
+  public async enqueueNotifications(items: NotificationOutbox[]): Promise<Result<void, Error>> {
+    const response = await this.connection.request({
+      type: "enqueueNotifications",
+      chainId: this.chainId,
+      items: items.map(notificationToWire),
+    });
+    return toResult(response, () => undefined);
+  }
+
+  public async getPendingNotifications(
+    limit: number,
+  ): Promise<Result<NotificationOutbox[], Error>> {
+    const response = await this.connection.request({
+      type: "getPendingNotifications",
+      chainId: this.chainId,
+      limit,
+    });
+    return toResult<"getPendingNotifications", NotificationOutbox[]>(response, (value) =>
+      value.map(wireToNotification),
+    );
+  }
+
+  public async markNotificationDelivered(
+    id: string,
+    deliveredAt: Date,
+    note?: string,
+  ): Promise<Result<void, Error>> {
+    const response = await this.connection.request({
+      type: "markNotificationDelivered",
+      chainId: this.chainId,
+      id,
+      deliveredAt: deliveredAt.toISOString(),
+      ...(note != null ? { note } : {}),
+    });
+    return toResult(response, () => undefined);
+  }
+
+  public async markNotificationFailed(
+    id: string,
+    failedRounds: number,
+    nextAttemptAt: Date,
+    error: string,
+  ): Promise<Result<void, Error>> {
+    const response = await this.connection.request({
+      type: "markNotificationFailed",
+      chainId: this.chainId,
+      id,
+      failedRounds,
+      nextAttemptAt: nextAttemptAt.toISOString(),
+      error,
+    });
+    return toResult(response, () => undefined);
+  }
+
+  public async pruneNotifications(before: Date): Promise<Result<void, Error>> {
+    const response = await this.connection.request({
+      type: "pruneNotifications",
+      chainId: this.chainId,
+      before: before.toISOString(),
     });
     return toResult(response, () => undefined);
   }

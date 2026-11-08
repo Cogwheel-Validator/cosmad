@@ -1,3 +1,5 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { loadChainConfigs, loadGlobalConfig } from "../config";
@@ -68,5 +70,51 @@ describe("loadChainConfig", () => {
     } else {
       expect(configs.error).toBeInstanceOf(ArkLoaderError);
     }
+  });
+});
+
+describe("duration settings", () => {
+  const chainToml = (extra: string) => `
+pretty_name = "Test"
+chain_type = "tm2"
+operator_address = "g1abc"
+signing_address = "g1abc"
+rpc_urls = [{ url = "https://rpc.example.com", alert_if_down = true }]
+${extra}
+alert_config = {
+  alert_if_inactive = true,
+  endpoint_down_alert_after = "2m",
+  notify_retry_pause = "30s",
+  notify_retry_max_pause = "1h",
+  stalled_alert = { enabled = true, stalled_threshold = "1m" },
+  consecutive_miss_alert = { enabled = true, threshold = 50, repeat = true, repeat_interval = "5m" },
+  percentage_missed_blocks_alert = { enabled = false, threshold = 10.0, repeat = false }
+}`;
+
+  function load(extra: string) {
+    const dir = mkdtempSync(join(tmpdir(), "cosmad_duration_"));
+    try {
+      writeFileSync(join(dir, "test-1.toml"), chainToml(extra));
+      const result = loadChainConfigs(dir);
+      if (!result.ok) throw result.error;
+      return result.value.get("test-1");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test("strings with units are parsed into the units the app uses", () => {
+    const chain = load('poll_interval = "6s"\nhealth_check_interval = "1m"');
+    expect(chain?.pollIntervalMs).toBe(6_000);
+    expect(chain?.healthCheckInterval).toBe(60);
+    expect(chain?.alertConfig.endpointDownAlertAfter).toBe(120);
+    expect(chain?.alertConfig.notifyRetryPause).toBe(30);
+    expect(chain?.alertConfig.notifyRetryMaxPause).toBe(3600);
+    expect(chain?.alertConfig.stalledAlert.stalledThreshold).toBe(60);
+    expect(chain?.alertConfig.consecutiveMissAlert.repeatInterval).toBe(300);
+  });
+
+  test("the old poll_interval_ms with a bare number still works", () => {
+    expect(load("poll_interval_ms = 3000")?.pollIntervalMs).toBe(3_000);
   });
 });

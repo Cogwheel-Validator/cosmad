@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { WholeSeconds } from "./duration";
 
 // Mirrors the options of hono's `cors()` / `csrf()` middleware. Function-valued options are
 // omitted since they can't be expressed in TOML.
@@ -10,8 +11,8 @@ export const CorsConfig = type({
   "allowMethods?": "string[]",
   // Access-Control-Allow-Headers.
   "allowHeaders?": "string[]",
-  // Access-Control-Max-Age, in seconds.
-  "maxAge?": "number.integer",
+  // Access-Control-Max-Age, e.g. "10m"; a bare number is seconds.
+  "maxAge?": WholeSeconds,
   // Access-Control-Allow-Credentials.
   "credentials?": "boolean",
   // Access-Control-Expose-Headers.

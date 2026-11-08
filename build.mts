@@ -4,7 +4,7 @@ await build({
   entryPoints: ["src/runner.ts"],
   bundle: true,
   platform: "node",
-  target: "node22",
+  target: "node24",
   outfile: "dist/runner.js",
   tsconfig: "tsconfig.json",
 })

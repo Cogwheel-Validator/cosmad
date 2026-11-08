@@ -1,7 +1,7 @@
 import type { Result } from "../../models/result";
 import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../analytics";
 import type { IWriteDb } from "../interfaces";
-import type { Alert, Block, ValidatorInactivity } from "../tables";
+import type { Alert, Block, NotificationOutbox, ValidatorInactivity } from "../tables";
 import type { RWDB } from "./rw_db";
 
 /** Binds a chain ID to a shared RWDB, implementing IWriteDb for in-process (non-socket) callers. */
@@ -50,6 +50,35 @@ export class ChainScopedDb implements IWriteDb {
     repeatCount: number,
   ): Promise<Result<void, Error>> {
     return this.db.touchAlertNotified(alertId, notifiedAt, repeatCount);
+  }
+
+  public enqueueNotifications(items: NotificationOutbox[]): Promise<Result<void, Error>> {
+    return this.db.enqueueNotifications(items);
+  }
+
+  public getPendingNotifications(limit: number): Promise<Result<NotificationOutbox[], Error>> {
+    return this.db.getPendingNotifications(this.chainId, limit);
+  }
+
+  public markNotificationDelivered(
+    id: string,
+    deliveredAt: Date,
+    note?: string,
+  ): Promise<Result<void, Error>> {
+    return this.db.markNotificationDelivered(id, deliveredAt, note);
+  }
+
+  public markNotificationFailed(
+    id: string,
+    failedRounds: number,
+    nextAttemptAt: Date,
+    error: string,
+  ): Promise<Result<void, Error>> {
+    return this.db.markNotificationFailed(id, failedRounds, nextAttemptAt, error);
+  }
+
+  public pruneNotifications(before: Date): Promise<Result<void, Error>> {
+    return this.db.pruneNotifications(this.chainId, before);
   }
 
   public insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>> {

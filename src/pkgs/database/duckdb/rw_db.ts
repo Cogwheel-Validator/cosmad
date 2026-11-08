@@ -7,11 +7,12 @@ import type { BlockWindowStats, ChainSignatureStats, DailyBlockStats } from "../
 import type { IWriteDb } from "../interfaces";
 import { generateCreateTableStatements } from "../sql/generate";
 import type { Constructor } from "../sql/types";
-import { Alert, Block, ValidatorInactivity, Version } from "../tables";
+import { Alert, Block, NotificationOutbox, ValidatorInactivity, Version } from "../tables";
 import { latestMigrationVersion, migrations } from "./migrations";
 import * as alertQueries from "./queries/alerts";
 import * as blockQueries from "./queries/blocks";
 import * as inactivityQueries from "./queries/inactivity";
+import * as outboxQueries from "./queries/outbox";
 import { ChainScopedDb } from "./scoped";
 
 /**
@@ -107,7 +108,12 @@ export class RWDB {
       await this.migrate(await this.currentVersion());
     }
 
-    const tables: Constructor[] = [Block, Alert, ValidatorInactivity] as Constructor[];
+    const tables: Constructor[] = [
+      Block,
+      Alert,
+      ValidatorInactivity,
+      NotificationOutbox,
+    ] as Constructor[];
     for (const table of tables) {
       for (const stmt of generateCreateTableStatements(table)) {
         await this.conn.run(stmt);
@@ -231,6 +237,45 @@ export class RWDB {
     repeatCount: number,
   ): Promise<Result<void, Error>> {
     return alertQueries.touchAlertNotified(this.conn, this.log, alertId, notifiedAt, repeatCount);
+  }
+
+  public enqueueNotifications(items: NotificationOutbox[]): Promise<Result<void, Error>> {
+    return outboxQueries.enqueueNotifications(this.conn, this.log, items);
+  }
+
+  public getPendingNotifications(
+    chainId: string,
+    limit: number,
+  ): Promise<Result<NotificationOutbox[], Error>> {
+    return outboxQueries.getPendingNotifications(this.conn, this.log, chainId, limit);
+  }
+
+  public markNotificationDelivered(
+    id: string,
+    deliveredAt: Date,
+    note?: string,
+  ): Promise<Result<void, Error>> {
+    return outboxQueries.markNotificationDelivered(this.conn, this.log, id, deliveredAt, note);
+  }
+
+  public markNotificationFailed(
+    id: string,
+    failedRounds: number,
+    nextAttemptAt: Date,
+    error: string,
+  ): Promise<Result<void, Error>> {
+    return outboxQueries.markNotificationFailed(
+      this.conn,
+      this.log,
+      id,
+      failedRounds,
+      nextAttemptAt,
+      error,
+    );
+  }
+
+  public pruneNotifications(chainId: string, before: Date): Promise<Result<void, Error>> {
+    return outboxQueries.pruneNotifications(this.conn, this.log, chainId, before);
   }
 
   public insertInactivity(period: ValidatorInactivity): Promise<Result<void, Error>> {

@@ -218,7 +218,7 @@ describe("ingest pipeline integration", () => {
       pagerduty: { enabled: true, serviceKey: "fake-key" },
       healthCheck: undefined,
     };
-    dispatcher = new NotificationDispatcher(chain.alertConfig, globalAlerts);
+    dispatcher = new NotificationDispatcher(chain.alertConfig, globalAlerts, writeDb);
   });
 
   afterAll(() => {

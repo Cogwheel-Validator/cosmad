@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { PositiveSeconds } from "./duration";
 
 export const PagerdutyConfig = type({
   enabled: "boolean",
@@ -19,7 +20,7 @@ export const TelegramConfig = type({
 export const HealthCheckConfig = type({
   enabled: "boolean",
   endpoint: "string.url",
-  ping: "number.integer", // seconds
+  ping: PositiveSeconds, // e.g. "1m"; a bare number is seconds
 });
 
 export type PagerdutyConfigType = typeof PagerdutyConfig.infer;
