@@ -4,3 +4,4 @@ dist
 data/
 config/**/*.toml
 !config/**/*.example.toml
+coverage

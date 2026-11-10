@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 1
+    commit-message:
+      prefix: "build"
+    ignore:
+      # stay on node 24, allow minor and patch updates
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]

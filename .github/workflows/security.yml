@@ -1,0 +1,32 @@
+name: Snyk security check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    name: Check project
+    environment: snyk-pnpm
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: ["24.x", "26.x"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # 7.1
+        with:
+          node-version: ${{ matrix.node-version}}
+
+      - name: Install snyk cli
+        run: npm install --location=global snyk
+
+      - name: Snyk dependency scan
+        run: snyk test --all-projects
