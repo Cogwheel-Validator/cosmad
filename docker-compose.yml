@@ -1,0 +1,32 @@
+services:
+  cosmad:
+    image: ghcr.io/cogwheel-validator/cosmad:latest
+    restart: always
+    ports:
+      # The API has no authentication. Keep it on localhost and put a reverse proxy in front.
+      - "127.0.0.1:3000:3000"
+    environment:
+      # DB_THREADS: "4"
+      # DB_MEM_LIMIT: "2GB"
+      # DB_MAX_TEMP_DIR_SIZE: "2GB"
+      TZ: UTC
+    volumes:
+      - ./config/config.toml:/etc/cosmad/config.toml:ro
+      - ./config/chains:/etc/cosmad/chains:ro
+      - cosmad-data:/var/lib/cosmad
+    healthcheck:
+      # Requires serve_api = true in config.toml.
+      test: [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:3000/api/v1/chains').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 20s
+
+volumes:
+  cosmad-data:

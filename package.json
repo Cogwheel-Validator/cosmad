@@ -16,6 +16,8 @@
     "vite": "vite",
     "build:frontend": "vue-tsc --noEmit -p src/frontend/tsconfig.json && vite build src/frontend && rm -rf dist/frontend && mkdir -p dist/frontend && mv src/frontend/dist dist/frontend",
     "build:backend": "pnpm run typecheck && esbuild src/runner.ts src/engine/main.ts src/dp/main.ts src/api/main.ts --bundle --platform=node --format=esm --target=esnext --outdir=dist --outbase=src --packages=external --sourcemap",
+    "build:b-docker": "pnpm run typecheck && esbuild src/runner.ts src/engine/main.ts src/dp/main.ts src/api/main.ts --bundle --platform=node --format=esm --target=esnext --outdir=dist --outbase=src --external:@duckdb/* --external:vite --minify --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --sourcemap",
+    "build:docker": "concurrently \"pnpm run build:b-docker\" \"pnpm run build:frontend\"",
     "build": "concurrently \"pnpm run build:backend\" \"pnpm run build:frontend\"",
     "format": "biome format",
     "lint": "biome lint",
