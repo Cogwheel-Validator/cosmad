@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Get project version
-        id: verstion
+        id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -25,7 +25,7 @@ jobs:
           # Check if it is a pre-release
           if [[ $VERSION =~ (alpha|beta|rc) ]]; then
             echo "prerelease=true" >> $GITHUB_OUTPUT
-            echo "docker_tag="dev" >> $GITHUB_OUTPUT
+            echo "docker_tag=dev" >> $GITHUB_OUTPUT
           else
             echo "prerelease=false" >> $GITHUB_OUTPUT
             echo "docker_tag=latest" >> $GITHUB_OUTPUT
