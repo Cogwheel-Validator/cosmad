@@ -28,5 +28,10 @@ jobs:
       - name: Install snyk cli
         run: npm install --location=global snyk
 
+      - name: Snyk auth
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_PAT }}
+        run: snyk auth $SNYK_TOKEN
+
       - name: Snyk dependency scan
         run: snyk test --all-projects
