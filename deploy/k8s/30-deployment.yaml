@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosmad
+  namespace: cosmad
+spec:
+  # Must stay at 1: DuckDB allows a single read-write process per database file.
+  replicas: 1
+  # Recreate (not RollingUpdate) so the old pod releases the DuckDB lock first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: cosmad }
+  template:
+    metadata:
+      labels: { app: cosmad }
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: cosmad
+          image: ghcr.io/cogwheel-validator/cosmad:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 3000 }
+          env:
+            - { name: HOST, value: "0.0.0.0" }
+            - { name: PORT, value: "3000" }
+            # - { name: DB_MEM_LIMIT, value: "1GB" } # keep below the memory limit
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { memory: 2Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          startupProbe:
+            httpGet: { path: /api/v1/chains, port: http }
+            periodSeconds: 10
+            failureThreshold: 36 # up to 6 min, the engine can replay a long WAL
+          livenessProbe:
+            httpGet: { path: /api/v1/chains, port: http }
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /api/v1/chains, port: http }
+            periodSeconds: 10
+          volumeMounts:
+            - {
+                name: config,
+                mountPath: /etc/cosmad/config.toml,
+                subPath: config.toml,
+                readOnly: true,
+              }
+            - { name: chains, mountPath: /etc/cosmad/chains, readOnly: true }
+            - { name: data, mountPath: /var/lib/cosmad }
+      volumes:
+        - name: config
+          secret: { secretName: cosmad-config }
+        - name: chains
+          configMap: { name: cosmad-chains }
+        - name: data
+          persistentVolumeClaim: { claimName: cosmad-data }

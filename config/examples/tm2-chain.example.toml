@@ -1,0 +1,202 @@
+# =============================================================================
+# Cosmad chain config - FULL REFERENCE for a Gnoland / TM2 ("tm2") chain
+# =============================================================================
+#
+# HOW TO USE
+#   1. Copy this file into your chains directory (CHAINS_DIRECTORY, default
+#      ./config/chains/) and name it after the REAL chain id:
+#          config/chains/gnoland1.toml
+#   2. Edit the values. Every setting below is shown with its default or a
+#      sensible example, and optional ones are commented out.
+#   3. Restart Cosmad. There is no hot reload; an invalid value stops start-up
+#      with a message naming the offending field.
+#
+# THINGS WORTH KNOWING
+#   * The FILE NAME is the chain id. It is used in API paths and as the database
+#     key. Do not rename it later, or you start a new, empty history.
+#     (Only *.toml files directly inside the chains directory are loaded.)
+#   * Keys are written in snake_case (they become camelCase internally).
+#   * DURATIONS are strings with a unit: "500ms", "30s", "2m", "1h30m", "1d", "1w".
+#     Parts can be chained ("1m 30s") and may have decimals ("1.5s").
+#     A bare number still works for backwards compatibility, but its unit
+#     depends on the field (milliseconds for poll_interval_ms, seconds for all
+#     others). A unit-less STRING such as "60" is rejected. Prefer "60s".
+#   * Trailing "/" on URLs is stripped, so it does not matter.
+#   * DIFFERENCES FROM bft CHAINS:
+#       - uses operator_address + signing_address (not valoper/valcons)
+#       - there is NO api_urls (it is ignored for tm2), only rpc_urls
+#       - there is no signing-params endpoint, so signing_window_size should be
+#         set by you (default 10000)
+#       - validator status (jailed/tombstoned/inactive) cannot be queried, so
+#         alert_if_inactive is required by the schema but has no effect
+#     For Cosmos SDK chains see bft-chain.example.toml.
+
+# -----------------------------------------------------------------------------
+# Identity
+# -----------------------------------------------------------------------------
+
+# Display name shown in the dashboard, API and alert messages. (required)
+pretty_name = "Gnoland"
+
+# Chain type. "tm2" = Gnoland / TM2, "bft" = Cosmos SDK / CometBFT. (required)
+chain_type = "tm2"
+
+# URL of a logo shown on the dashboard. (optional, omit for no logo)
+# chain_logo = "https://example.com/gnoland.svg"
+
+# Your validator's operator account: g1... (required for tm2)
+operator_address = "g1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Your validator's block-signing address: g1... (required for tm2)
+# Identifies YOUR signatures in each block's commit. This is the address of the
+# node's priv_validator_key, which is usually NOT the same as the operator account.
+signing_address = "g1yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+
+# -----------------------------------------------------------------------------
+# Endpoints
+# -----------------------------------------------------------------------------
+# Tip: use two or more URLs, ideally from different providers. Cosmad fails over
+# between them, so one provider outage will not stop monitoring.
+#
+# alert_if_down:
+#   true  -> an outage of THIS endpoint raises an rpc_down alert
+#            (after endpoint_down_alert_after, see below).
+#   false -> endpoint is used and health-checked, but it never pages you.
+#            Good for public/community fallbacks that you do not control.
+
+# TM2 RPC endpoints. At least one is required.
+rpc_urls = [
+  { url = "https://rpc.gno.land", alert_if_down = true },                # primary: page me
+  { url = "https://secondary-rpc.example.org", alert_if_down = false },  # fallback: stay quiet
+]
+
+# api_urls is NOT used for tm2 chains. Do not set it.
+
+# -----------------------------------------------------------------------------
+# Polling and ingestion tuning (all optional)
+# -----------------------------------------------------------------------------
+
+# How often to poll the RPC for new blocks. Default "6s".
+# Set it close to the chain's block time. Raise it if you are rate limited.
+# `poll_interval_ms` is the older name for the same setting (a bare number
+# there means MILLISECONDS). Use only one of the two.
+poll_interval = "3s"
+# poll_interval_ms = 3000
+
+# How often every RPC endpoint is health checked. Default "1m".
+# An outage is noticed at the next check, then endpoint_down_alert_after applies.
+health_check_interval = "1m"
+
+# Max number of block-commit requests in flight at once while catching up on a
+# range of blocks (e.g. after downtime). Default 25.
+# Lower it for rate-limited RPCs; catch-up becomes slower but gentler.
+range_chunk_size = 25
+
+# Max blocks fetched AND stored per poll cycle when there is a backlog (after
+# downtime or on first run against an old chain). A big gap is worked off over
+# many polls instead of one giant fetch. Default 100.
+max_blocks_per_poll = 100
+
+# EXPERIMENTAL. Default false.
+# Normally, when a block's commit permanently fails to download (all retries
+# used up), ingestion stops right before that height and retries it on every
+# poll, so no history is silently lost.
+# Set true to SKIP that height and keep going, leaving a permanent gap. Only
+# useful when you know a block is unfetchable from all your RPCs (e.g. pruned,
+# which is common on young testnets that reset). Turn it back off once the
+# troublesome block has been skipped.
+allow_block_gaps = false
+
+# -----------------------------------------------------------------------------
+# Alerting
+# -----------------------------------------------------------------------------
+# Every alert goes through the notifiers enabled in config.toml (Telegram,
+# Discord, PagerDuty) and each alert has three events: opened, repeated, closed.
+#
+# The four rule blocks below (alert_if_inactive, stalled_alert,
+# consecutive_miss_alert, percentage_missed_blocks_alert) are REQUIRED. To turn
+# one off, keep it and set enabled = false.
+#
+# (This file uses regular [alert_config.*] tables, which every TOML 1.0 parser
+# understands. The one-line / multi-line `alert_config = { ... }` style used
+# elsewhere in the docs is equivalent.)
+
+[alert_config]
+
+# Required by the schema, but has NO EFFECT on tm2 chains: validator status
+# (inactive / jailed / tombstoned) is only available through the Cosmos REST API.
+alert_if_inactive = true
+
+# How long an endpoint marked alert_if_down = true must stay CONTINUOUSLY
+# unhealthy before rpc_down is raised, so one timeout or a quick restart does
+# not wake you up. Default "3m".
+# "0s" alerts on the first failed health check. The real delay can be up to one
+# health_check_interval longer because detection happens on health checks.
+endpoint_down_alert_after = "3m"
+
+# If a notification cannot be delivered (3 quick attempts fail), it is retried
+# after a pause that DOUBLES with every failed round: 5m, 10m, 20m, 40m...
+# until it is capped. Nothing is lost: undelivered notifications are stored in
+# the database and survive restarts.
+notify_retry_pause = "5m"       # first pause. Default "5m"
+notify_retry_max_pause = "1h"   # upper cap.   Default "1h" (must be >= notify_retry_pause)
+
+# Number of trailing blocks used as the sliding window for
+# percentage_missed_blocks_alert. tm2 chains have no endpoint that reports it,
+# so it falls back to 10000 when unset. RECOMMENDED: set it to something that
+# matches the chain's block time and slashing window.
+signing_window_size = 10000
+
+# --- Chain stalled -----------------------------------------------------------
+# Fires when the chain has not produced a new block for stalled_threshold.
+# Tells you "the whole chain is halted", not "you are missing blocks".
+[alert_config.stalled_alert]
+enabled = true
+# Set comfortably above a few block times, or you will get false alarms.
+stalled_threshold = "1m"
+
+# --- Consecutive missed blocks -----------------------------------------------
+# Fires when YOUR validator misses `threshold` blocks IN A ROW. This is your
+# fastest signal that your node is down or out of sync.
+# TIP: keep the threshold well below the chain's slashing downtime tolerance so
+# you can react BEFORE being slashed.
+[alert_config.consecutive_miss_alert]
+enabled = true
+threshold = 50           # number of blocks in a row (not seconds)
+repeat = false           # true = re-send the alert while it is still unresolved
+repeat_interval = "5m"   # pause between repeats. Only used when repeat = true,
+                         # but the field must still be present
+
+# --- Percentage of missed blocks ---------------------------------------------
+# Fires when you missed `threshold` percent of the blocks in the sliding signing
+# window (signing_window_size above). Catches slow, flaky degradation that never
+# reaches a long streak.
+[alert_config.percentage_missed_blocks_alert]
+enabled = true
+threshold = 10.0   # percent. Allowed range: above 0.5 up to and including 95
+# With repeat = true, the alert is re-sent whenever the miss percentage climbs
+# past the threshold multiplied by 1.5 for every repeat already sent
+# (10% -> 15% -> 22.5% -> 33.75% ...). So repeats escalate instead of spamming.
+repeat = false
+
+# --- Per-chain notifier overrides (all optional) -------------------------------
+# By default the global notifiers from config.toml are used for every chain. Add
+# a table below to send THIS chain's alerts somewhere else (e.g. a dedicated
+# Telegram group for this chain, or a separate PagerDuty service).
+#
+# IMPORTANT: a per-chain table REPLACES the global one for this chain entirely,
+# so repeat ALL its fields. `enabled = false` here mutes that notifier for this
+# chain only. The health_check notifier is global only and cannot be overridden.
+
+# [alert_config.telegram]
+# enabled = true
+# bot_token = "123456:ABC-DEF..."   # from @BotFather
+# chat_id = "-100123456789"         # a STRING; negative for groups/channels
+
+# [alert_config.discord]
+# enabled = true
+# webhook_url = "https://discord.com/api/webhooks/<id>/<token>"
+
+# [alert_config.pagerduty]
+# enabled = true
+# service_key = "<Events API v2 integration key>"

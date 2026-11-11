@@ -7,8 +7,48 @@ COSMAD provides a full stack solution for tracking signing activity of the valid
 
 ## Project Status
 
-Project is in ALPHA! While it should be stable, it is still under active development,
-and could change significantly or contain some bugs.
+Project is in some early Beta stage. The basic features are stable and have been
+tested for several months, however not all features are available yet. And there
+might be a possibility of having some bugs until all features are completed and
+properly tested.
+
+## Quick start
+
+```sh
+cp config/config.example.toml config/config.toml    # edit, then add config/chains/<chain-id>.toml
+
+# Docker
+docker compose up -d                       # dashboard + API on http://127.0.0.1:3000
+
+# From source (Node 24, pnpm)
+pnpm install --frozen-lockfile && pnpm build && pnpm start
+```
+
+API reference (Scalar) is served at `/api/reference` and the OpenAPI spec at `/api/openapi.json`.
+
+## Documentation
+
+- [Getting started](docs/getting-started.md)
+- [How it works](docs/architecture.md)
+- [Configuration](docs/configuration.md) and [notifications](docs/notifications.md)
+- [API](docs/api.md)
+- Deployment:
+  - [Docker / Compose](docs/deploy-docker.md),
+  - [systemd](docs/deploy-systemd.md),
+  - [Kubernetes](docs/deploy-kubernetes.md)
+- [Operations](docs/operations.md): security, reverse proxy, backups, troubleshooting
+
+## Requirements
+
+OS: Linux, Windows, Mac OS
+CPU Arch: AMD64, ARM64
+CPU Core count: Minimum at least 2 cores, 4 cores is safe and recommended count
+RAM: Minimum 2GB, Recommended 4GB
+Storage: 10GB++
+
+Depending on the amount of chains you plan to process, the amount of data you plan
+to keep, and how many requests you plan to make to the API, you might need more
+RAM and storage capacity.
 
 ## Project stack
 
@@ -48,6 +88,7 @@ To understand what this tool tries to achieve a simple comparison might be helpf
 | Query Method         | Pull (REST and RPC)     | Pull and Push (WS and RPC) |
 | State                | Database (DuckDB)       | Almost stateless           |
 | Access to state      | REST(Hono), Unix Socket | None                       |
+| Resources required   | Around 600MB RAM        | 300-400MB RAM              |
 
 ### Similarities
 
@@ -81,9 +122,15 @@ The _cons_ for this option is if you do use rate limited endpoints they might bl
 Cosmad from collecting the data. However if you use multiple endpoints it should
 be able to collect data from multiple sources and avoid being blocked.
 
-Another important info is that since Cosmad can't fetch data about missing, prevotes
-and precommits. There are only 3 possible outcome, you were in the inacitive set,
-missed or signed the block.
+Another important info is that since Cosmad can't fetch data about missing, prevotes.
+
+For TM2 chains (Gnoland) due to limitation of getting the data when the validator
+was included into the set and when it was removed. There is no option like for
+Cosmos SDK chains to query the validator set at a specific height. It might be possible
+to construct this data by using some specialized indexer that can track this data
+but from perspective of monitoring tool this is not possible. So for now if you
+fall off the active set the, the `cosmad` will treat it like validator missed the
+vote. In the future this might change how it is handled.
 
 #### Chain State Tracking
 
@@ -122,6 +169,15 @@ recommended way to collect data and interact with the the state is through the A
 For any write operations, then Unix Socket will be needed. It is not recommended
 to manually interact with it unless you really need to.
 
+#### Resources required to run
+
+Tenderduty is lighter comapred to Cosmad, but this is mostly due to running less
+processes. Cosmad has a full stack operation, a backend data processor, database,
+dashboard and a REST API that also serves the dashboard. And depending on the amount
+of chains you plan to process DuckDB might require more RAM and CPU cores for data
+processing and query. Tenderduty is more lightweight, but it is also limited in
+what it can do.
+
 ## Roadmap
 
 This is a work in progress and the roadmap is subject to change.
@@ -131,15 +187,22 @@ This is a work in progress and the roadmap is subject to change.
   - [x] Telegram
   - [ ] Slack
   - [x] Discord
-  - [x] Healthchecks
+  - [x] Alert if node down
+  - [x] Alert if chain halts
+  - [x] Alert if validator is jailed
+  - [x] Alert if process stops working(Healthchecks)
 - Data Processor
   - [x] Record blocks and alerts and keep them in the database
+  - [x] Record when validator goes out of the active set or getting jailed
   - [ ] Pruning database option
   - [ ] Store other validator data (e.g. delegator count, staked amount etc...)
-- Dashboard:
-  - [ ] Live tracking of the chain state
-  - [ ] Statistics for the last 30 days
-  - [ ] Per chain stats
+  - [ ] Allow tracking multiple operators on the same network
+- Dashboard and API:
+  - [x] Live tracking of the chain state
+  - [x] Statistics for the last 30 days
+  - [x] Per chain stats
+  - [ ] Add some sort of authentication to access the page and API?
+  - [ ] Rate limits?
 - Reports:
   - [ ] Add pdf generation option
   - [ ] Send reports

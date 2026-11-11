@@ -1,0 +1,35 @@
+[Unit]
+Description=COSMAD - Cosmos validator monitoring
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cosmad
+Group=cosmad
+WorkingDirectory=/opt/cosmad
+EnvironmentFile=-/etc/cosmad/cosmad.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/runner.js
+Restart=on-failure
+RestartSec=5
+# The engine may replay a large DuckDB WAL on start (up to 5 min); the runner waits for it.
+TimeoutStartSec=360
+TimeoutStopSec=30
+KillMode=control-group
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/cosmad
+# /proc must stay visible: the runner uses /proc/<pid>/cmdline to reap stale engines.
+ProcSubset=all
+
+[Install]
+WantedBy=multi-user.target
