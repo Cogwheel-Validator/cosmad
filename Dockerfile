@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # build: compile backend + dashboard
-FROM node:24.22.2-trixie-slim AS build
+FROM node:24.22.3-trixie-slim AS build
 WORKDIR /app
 RUN corepack enable
 ENV HUSKY=0
@@ -19,7 +19,7 @@ RUN node scripts/check-bundle.mjs dist
 
 # native deps: only DuckDB stays external (esbuild cannot bundle .node binaries);
 # everything else is inlined into dist/ by esbuild. npm picks the bindings for this platform.
-FROM node:24.22.2-trixie-slim AS deps
+FROM node:24.22.3-trixie-slim AS deps
 WORKDIR /app
 COPY package.json ./
 RUN node -e 'const v=require("./package.json").dependencies["@duckdb/node-api"];require("fs").writeFileSync("package.json",JSON.stringify({name:"native",private:true,dependencies:{"@duckdb/node-api":v}}))' \
@@ -27,7 +27,7 @@ RUN node -e 'const v=require("./package.json").dependencies["@duckdb/node-api"];
 
 # ---- runtime ----
 # Debian (glibc) based on purpose: the DuckDB native bindings do not run on musl/Alpine.
-FROM node:24.22.2-trixie-slim
+FROM node:24.22.3-trixie-slim
 ENV NODE_ENV=production \
   HOST=0.0.0.0 \
   PORT=3000 \
